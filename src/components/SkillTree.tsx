@@ -18,6 +18,7 @@ interface SkillTreeProps {
   topicStatuses: Record<string, TopicStatus>;
   grades: Record<string, { score: number; completedAt: string }>;
   onSelectTopic: (topic: Topic) => void;
+  isTeacher?: boolean;
 }
 
 export const SkillTree: React.FC<SkillTreeProps> = ({
@@ -25,6 +26,7 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
   topicStatuses,
   grades,
   onSelectTopic,
+  isTeacher = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -60,6 +62,12 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
     setPosition({ x: 0, y: 0 });
   };
 
+  // Compute dynamic bounds so SVG canvas wraps all nodes seamlessly
+  const maxX = Math.max(...topics.map(t => t.position?.x || 0), 2400);
+  const maxY = Math.max(...topics.map(t => t.position?.y || 0), 600);
+  const canvasWidth = `${maxX + 500}px`;
+  const canvasHeight = `${Math.max(850, maxY + 350)}px`;
+
   return (
     <div className="relative w-full h-[620px] rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-[#FBFBFA] dark:bg-[#0F1115] overflow-hidden select-none shadow-inner">
       {/* Canvas Grid Background */}
@@ -77,15 +85,19 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
             transformOrigin: 'top left',
             transition: isDragging ? 'none' : 'transform 0.15s ease-out',
-            width: '2800px',
-            height: '800px',
+            width: canvasWidth,
+            height: canvasHeight,
             position: 'absolute',
             top: 0,
             left: 0
           }}
         >
           {/* SVG Connections Layer */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+          <svg 
+            width={canvasWidth} 
+            height={canvasHeight} 
+            className="absolute inset-0 pointer-events-none z-0"
+          >
             <defs>
               <linearGradient id="activeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="#2563EB" />
@@ -120,9 +132,11 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
                 }
 
                 const isPrereqDone = topicStatuses[prereq.id] === 'completed';
-                const isCurrentActive = topicStatuses[topic.id] !== 'locked';
+                const isCurrentActive = isTeacher || topicStatuses[topic.id] !== 'locked';
                 const strokeColor = isPrereqDone && isCurrentActive
                   ? '#10B981'
+                  : isTeacher
+                  ? '#6366F1'
                   : isCurrentActive
                   ? '#2563EB'
                   : 'rgba(156, 163, 175, 0.35)';
@@ -163,8 +177,8 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
             const status: TopicStatus = topicStatuses[topic.id] || 'locked';
             const grade = grades[topic.id];
             const isCompleted = status === 'completed';
-            const isAvailable = status === 'in_progress';
-            const isLocked = status === 'locked';
+            const isAvailable = isTeacher || status === 'in_progress';
+            const isLocked = !isTeacher && status === 'locked';
 
             return (
               <div
@@ -182,9 +196,11 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
                       onSelectTopic(topic);
                     }
                   }}
-                  className={`group relative flex flex-col w-64 p-3.5 rounded-2xl border transition-all duration-200 ${
+                  className={`skill-tree-node-card group relative flex flex-col w-64 p-3.5 rounded-2xl border transition-all duration-200 ${
                     isCompleted
                       ? 'bg-white dark:bg-[#181B21] border-emerald-500/50 shadow-md shadow-emerald-500/10 hover:border-emerald-500 hover:shadow-lg cursor-pointer'
+                      : isTeacher
+                      ? 'bg-white dark:bg-[#181B21] border-indigo-500/50 shadow-md shadow-indigo-500/10 hover:border-indigo-500 hover:scale-[1.02] cursor-pointer'
                       : isAvailable
                       ? 'bg-white dark:bg-[#181B21] border-[#2563EB] shadow-lg shadow-blue-500/15 ring-2 ring-[#2563EB]/30 hover:scale-[1.02] cursor-pointer'
                       : 'bg-gray-100/80 dark:bg-[#14161C]/80 border-gray-200 dark:border-gray-800/80 opacity-60 cursor-not-allowed'
@@ -203,6 +219,8 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
                     <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                       isCompleted
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300'
+                        : isTeacher
+                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300'
                         : isAvailable
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300'
                         : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
@@ -215,6 +233,11 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
                         <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                           <CheckCircle2 className="w-4 h-4" />
                           {grade && <span>{grade.score}/10</span>}
+                        </div>
+                      ) : isTeacher ? (
+                        <div className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 text-xs font-semibold">
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Просмотр</span>
                         </div>
                       ) : isAvailable ? (
                         <div className="flex items-center gap-1 text-[#2563EB] dark:text-[#60A5FA] text-xs font-semibold animate-pulse">
@@ -229,7 +252,7 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
 
                   {/* Title */}
                   <h4 className={`text-xs font-semibold line-clamp-2 leading-snug mb-2 ${
-                    isCompleted || isAvailable
+                    isCompleted || isAvailable || isTeacher
                       ? 'text-[#111827] dark:text-[#F3F3EF]'
                       : 'text-gray-500 dark:text-gray-500'
                   }`}>

@@ -1,5 +1,7 @@
 export type TopicStatus = 'completed' | 'in_progress' | 'locked';
 
+export type ThemeMode = 'light' | 'dark';
+
 export interface Question {
   id: string;
   question: string;
@@ -58,6 +60,7 @@ export interface PracticalWork {
 export interface Subject {
   id: string;
   title: string;
+  shortTitle?: string;
   code: string;
   subtitle: string;
   department: string;
@@ -82,6 +85,7 @@ export interface User {
   group: string; // e.g. "37В"
   course: number;
   avatar?: string;
+  needsOnboarding?: boolean;
 }
 
 export interface CollegeGroup {
@@ -99,6 +103,9 @@ export interface StudentGradeRecord {
   topicGrades: Record<string, number | null>; // topicId -> score 1-10 or null
   practicalStatuses: Record<number, 'submitted' | 'graded' | 'not_submitted'>;
   averageScore: number;
+  subjectGrades?: Record<string, Record<string, number | null>>; // subjectId -> (topicId | workId) -> score 1-10
+  subjectAverages?: Record<string, number>; // subjectId -> average score
+  teacherNotes?: Record<string, string>; // subjectId -> optional note
 }
 
 export interface StudentProgress {

@@ -17,11 +17,11 @@ export const ScheduleView: React.FC = () => {
   const scheduleItems = [
     {
       dayIndex: 0, // Пн
-      title: 'Математика',
-      type: 'Лекция',
+      title: 'Программирование микропроцессорных систем',
+      type: 'Лекция • Архитектура МПС',
       time: '08:30 - 10:00',
-      room: 'Ауд. 204',
-      teacher: 'Ковалева И.В.',
+      room: 'Ауд. 310',
+      teacher: 'Селедцов А.И.',
       color: 'border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/30'
     },
     {
@@ -44,20 +44,20 @@ export const ScheduleView: React.FC = () => {
     },
     {
       dayIndex: 2, // Ср
-      title: 'Физика',
-      type: 'Лекция',
+      title: 'Системы автоматизированного проектирования',
+      type: 'Лекция • САПР и схемотехника',
       time: '12:00 - 13:30',
-      room: 'Ауд. 108',
-      teacher: 'Смирнов В.П.',
+      room: 'Ауд. 308',
+      teacher: 'Селедцов А.И., Лисов А.А.',
       color: 'border-l-cyan-500 bg-cyan-50/60 dark:bg-cyan-950/30'
     },
     {
       dayIndex: 3, // Чт
-      title: 'Дискретная математика',
-      type: 'Практика',
+      title: 'Техническая эксплуатация средств ВТ',
+      type: 'Практика • Диагностика аппаратной части',
       time: '14:00 - 15:30',
-      room: 'Ауд. 215',
-      teacher: 'Петрова Е.Н.',
+      room: 'Ауд. 314',
+      teacher: 'Селедцов А.И.',
       color: 'border-l-amber-500 bg-amber-50/60 dark:bg-amber-950/30'
     },
     {
@@ -68,6 +68,15 @@ export const ScheduleView: React.FC = () => {
       room: 'Ауд. 312',
       teacher: 'Селедцов А.И.',
       color: 'border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/30'
+    },
+    {
+      dayIndex: 4, // Пт
+      title: 'Разработка мобильных приложений',
+      type: 'Лабораторная работа',
+      time: '12:00 - 13:30',
+      room: 'Ауд. 312',
+      teacher: 'Селедцов А.И.',
+      color: 'border-l-purple-500 bg-purple-50/60 dark:bg-purple-950/30'
     }
   ];
 

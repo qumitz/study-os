@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Topic, Question } from '../types';
 import { AdminTopicEditor } from './AdminTopicEditor';
+import { SynopsisViewer } from './SynopsisViewer';
 
 interface TopicModalProps {
   topic: Topic | null;
@@ -23,6 +24,7 @@ interface TopicModalProps {
   isCompleted: boolean;
   savedGrade?: { score: number; completedAt: string };
   isAdmin?: boolean;
+  isTeacher?: boolean;
   onSaveTopic?: (updatedTopic: Topic) => void;
 }
 
@@ -33,12 +35,15 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   isCompleted,
   savedGrade,
   isAdmin = false,
+  isTeacher = false,
   onSaveTopic
 }) => {
   if (!topic) return null;
 
+  const isTeacherOrAdmin = isAdmin || isTeacher;
   const [activeTab, setActiveTab] = useState<'synopsis' | 'test'>('synopsis');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isTeacherPreviewMode, setIsTeacherPreviewMode] = useState(false);
   
   // Test state
   const test = topic.test;
@@ -49,15 +54,15 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>((test?.durationMinutes ?? 15) * 60);
   const [timerActive, setTimerActive] = useState(false);
 
-  // Start timer when entering test tab if not completed
+  // Start timer when entering test tab if not completed and not in teacher inspection mode
   useEffect(() => {
-    if (activeTab === 'test' && !isCompleted && !testFinished && !timerActive) {
+    if (activeTab === 'test' && !isCompleted && !testFinished && !timerActive && !isTeacherOrAdmin) {
       setTimerActive(true);
     }
-  }, [activeTab, isCompleted, testFinished, timerActive]);
+  }, [activeTab, isCompleted, testFinished, timerActive, isTeacherOrAdmin]);
 
   useEffect(() => {
-    if (!timerActive || testFinished || isCompleted) return;
+    if (!timerActive || testFinished || isCompleted || isTeacherOrAdmin) return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -69,7 +74,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [timerActive, testFinished, isCompleted, selectedAnswers]);
+  }, [timerActive, testFinished, isCompleted, selectedAnswers, isTeacherOrAdmin]);
 
   const handleSelectAnswer = (qIndex: number, optIndex: number) => {
     if (isCompleted || testFinished) return; // Prevent changing after submission
@@ -131,13 +136,13 @@ export const TopicModal: React.FC<TopicModalProps> = ({
           </div>
           
           <div className="flex items-center gap-2">
-            {isAdmin && (
+            {isTeacherOrAdmin && (
               <button
                 onClick={() => setIsEditorOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-100 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition-colors shadow-xs"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Редактировать тему (Админ)</span>
+                <span>Редактировать тему {isAdmin ? '(Админ)' : '(Преподаватель)'}</span>
               </button>
             )}
 
@@ -179,6 +184,10 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                   Сдано: {savedGrade?.score ?? testScore}/10
                 </span>
+              ) : isTeacherOrAdmin ? (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                  Режим учителя
+                </span>
               ) : (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                   1 попытка
@@ -218,17 +227,9 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                 </ul>
               </div>
 
-              {/* Full lecture content */}
-              <div className="prose dark:prose-invert max-w-none text-sm leading-relaxed text-[#374151] dark:text-[#D1D5DB] space-y-4">
-                <div 
-                  className="whitespace-pre-line font-sans"
-                  dangerouslySetInnerHTML={{ 
-                    __html: topic.synopsis.content
-                      .replace(/^### (.*$)/gim, '<h3 class="text-base font-bold text-[#111827] dark:text-[#F3F3EF] mt-5 mb-2">$1</h3>')
-                      .replace(/^## (.*$)/gim, '<h2 class="text-lg font-bold text-[#111827] dark:text-[#F3F3EF] mt-6 mb-3">$1</h2>')
-                      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-[#111827] dark:text-[#F3F3EF]">$1</strong>')
-                  }} 
-                />
+              {/* Full lecture content with image and lightbox support */}
+              <div className="pt-2">
+                <SynopsisViewer content={topic.synopsis.content} />
               </div>
 
               {/* Footer action to start test */}
@@ -242,36 +243,166 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                     onClick={() => setActiveTab('test')}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm"
                   >
-                    <span>{isCompleted ? 'Посмотреть результаты теста' : 'Перейти к тесту'}</span>
+                    <span>
+                      {isCompleted 
+                        ? 'Посмотреть результаты теста' 
+                        : isTeacherOrAdmin 
+                        ? 'Ознакомиться с тестом и ответами' 
+                        : 'Перейти к тесту'}
+                    </span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               )}
             </div>
-          ) : (
-            /* TEST TAB */
-            <div className="space-y-6">
-              {/* Test Header Banner */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                      Режим строгого тестирования
-                    </span>
-                    <span className="text-xs text-amber-700 dark:text-amber-400/90">
-                      Тест проходится один раз. Оценка автоматически заносится в ведомость группы 37В.
-                    </span>
+          ) : test ? (
+            isTeacherOrAdmin && !isTeacherPreviewMode ? (
+                /* TEACHER INSPECTION VIEW */
+                <div className="space-y-6">
+                  {/* Teacher Inspection Banner */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                            Режим преподавателя: Полный обзор теста и эталонов
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-200/70 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-300">
+                            {test.questions.length} вопросов
+                          </span>
+                        </div>
+                        <span className="text-xs text-indigo-700 dark:text-indigo-300/80">
+                          Сдавать тест не требуется. Ниже представлены все вопросы, эталонные правильные ответы и пояснения.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setIsEditorOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Редактировать тест</span>
+                      </button>
+                      <button
+                        onClick={() => setIsTeacherPreviewMode(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/50 dark:hover:bg-indigo-950 text-xs font-semibold transition-colors"
+                      >
+                        <span>Симуляция студента</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Question by question breakdown for teacher */}
+                  <div className="space-y-4">
+                    {test.questions.map((q, qIdx) => (
+                      <div 
+                        key={q.id || qIdx} 
+                        className="p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#181B21] shadow-xs space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <span className="w-6 h-6 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center shrink-0">
+                              {qIdx + 1}
+                            </span>
+                            <h4 className="text-sm font-semibold text-[#111827] dark:text-[#F3F3EF] leading-snug">
+                              {q.question}
+                            </h4>
+                          </div>
+                          <span className="text-[11px] font-mono font-medium text-gray-500 shrink-0">
+                            Макс. балл: 10
+                          </span>
+                        </div>
+
+                        {/* Options with correct highlighted */}
+                        <div className="space-y-2 pl-8">
+                          {q.options.map((opt, optIdx) => {
+                            const isCorrect = optIdx === q.correctIndex;
+                            return (
+                              <div 
+                                key={optIdx} 
+                                className={`p-2.5 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-3 border transition-colors ${
+                                  isCorrect
+                                    ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 font-medium'
+                                    : 'bg-gray-50/60 dark:bg-[#121418] border-gray-200 dark:border-gray-800/80 text-gray-700 dark:text-gray-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                                    isCorrect
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                  }`}>
+                                    {String.fromCharCode(65 + optIdx)}
+                                  </span>
+                                  <span>{opt}</span>
+                                </div>
+                                {isCorrect && (
+                                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-md shrink-0">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Эталонный ответ</span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Pedagogical Explanation */}
+                        {q.explanation && (
+                          <div className="ml-8 p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-xs text-blue-900 dark:text-blue-200 space-y-1">
+                            <span className="font-semibold block text-blue-700 dark:text-blue-400">
+                              Методическое пояснение для студента:
+                            </span>
+                            <p className="leading-relaxed">{q.explanation}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
+              ) : (
+                /* REGULAR STUDENT TEST FORM / OR TEACHER PREVIEW SIMULATION */
+                <div className="space-y-6">
+                  {isTeacherPreviewMode && (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
+                      <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                        Режим симуляции прохождения теста (оценка не повлияет на успеваемость)
+                      </span>
+                      <button
+                        onClick={() => setIsTeacherPreviewMode(false)}
+                        className="text-xs font-bold text-indigo-600 hover:underline"
+                      >
+                        ← Вернуться к обзору учителя
+                      </button>
+                    </div>
+                  )}
 
-                {!isCompleted && !testFinished && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-[#15181E] border border-amber-200 dark:border-amber-900/60 text-amber-700 dark:text-amber-400 text-xs font-mono font-bold shrink-0">
-                    <Clock className="w-4 h-4" />
-                    <span>{formatTime(timeLeft)}</span>
+                  {/* Test Header Banner */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                          Режим строгого тестирования
+                        </span>
+                        <span className="text-xs text-amber-700 dark:text-amber-400/90">
+                          Тест проходится один раз. Оценка автоматически заносится в ведомость группы 37В.
+                        </span>
+                      </div>
+                    </div>
+
+                    {!isCompleted && !testFinished && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-[#15181E] border border-amber-200 dark:border-amber-900/60 text-amber-700 dark:text-amber-400 text-xs font-mono font-bold shrink-0">
+                        <Clock className="w-4 h-4" />
+                        <span>{formatTime(timeLeft)}</span>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
               {/* Already Completed or Finished View */}
               {(isCompleted || testFinished) ? (
@@ -331,8 +462,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                 </div>
               ) : (
                 /* Ongoing Question Form */
-                test && (
-                  <div className="space-y-6">
+                <div className="space-y-6">
                     {/* Question progress count */}
                     <div className="flex items-center justify-between text-xs text-[#6B7280] dark:text-[#9CA3AF]">
                       <span>Вопрос {currentQuestionIndex + 1} из {test.questions.length}</span>
@@ -401,15 +531,15 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                       )}
                     </div>
                   </div>
-                )
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )
+          ) : null}
         </div>
       </div>
 
       {/* Admin Topic Editor Modal */}
-      {isAdmin && (
+      {isTeacherOrAdmin && (
         <AdminTopicEditor
           topic={topic}
           isOpen={isEditorOpen}

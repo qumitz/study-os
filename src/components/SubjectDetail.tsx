@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Layers, 
@@ -40,7 +40,31 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
   const [viewMode, setViewMode] = useState<'tree' | 'list' | 'practicals' | 'tests'>('tree');
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
 
+  // Sliding pill indicator for Liquid Glass view tabs
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabPillStyle, setTabPillStyle] = useState<{ left: number; width: number; height: number; opacity: number }>({
+    left: 0,
+    width: 0,
+    height: 38,
+    opacity: 0
+  });
+  const [isPressingTab, setIsPressingTab] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!tabsRef.current) return;
+    const activeEl = tabsRef.current.querySelector<HTMLButtonElement>(`[data-tab-id="${viewMode}"]`);
+    if (activeEl) {
+      setTabPillStyle({
+        left: activeEl.offsetLeft,
+        width: activeEl.offsetWidth,
+        height: activeEl.offsetHeight,
+        opacity: 1
+      });
+    }
+  }, [viewMode]);
+
   // Compute progress statistics
+  const isTeacherOrAdmin = currentUser.role === 'teacher' || currentUser.role === 'admin';
   const totalTopics = subject.topics.length;
   const completedTopicsCount = subject.topics.filter(
     t => progress.topicStatuses[t.id] === 'completed'
@@ -104,7 +128,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
               </span>
             </div>
             <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#8E95A2] mt-1">
-              {subject.department} • Преподаватель: <strong className="text-[#374151] dark:text-[#D1D5DB] font-semibold">{subject.teacher}</strong>
+              {subject.department} • {subject.teacher.includes(',') ? 'Преподаватели' : 'Преподаватель'}: <strong className="text-[#374151] dark:text-[#D1D5DB] font-semibold">{subject.teacher}</strong>
             </p>
           </div>
         </div>
@@ -128,10 +152,29 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
       </div>
 
       {/* View Switcher Tabs (Tree, List, Practicals, Tests) */}
-      <div className="flex items-center gap-2 border-b border-[#E5E7EB] dark:border-[#262A32] pb-px overflow-x-auto">
+      <div ref={tabsRef} className="subject-tabs flex items-center gap-1.5 border-b border-[#E5E7EB] dark:border-[#262A32] pb-1 overflow-x-auto relative">
+        {/* Sliding Liquid Glass Capsule (smoothly glides to active tab in Liquid Glass mode) */}
+        <div
+          className={`liquid-pill-indicator ${isPressingTab ? 'is-pressed' : ''}`}
+          style={{
+            left: `${tabPillStyle.left}px`,
+            width: `${tabPillStyle.width}px`,
+            height: `${tabPillStyle.height}px`,
+            top: 0,
+            bottom: 0,
+            margin: 'auto 0',
+            opacity: tabPillStyle.opacity,
+          }}
+        />
+
         <button
+          data-tab-id="tree"
           onClick={() => setViewMode('tree')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-all shrink-0 ${
+          onPointerDown={() => setIsPressingTab(true)}
+          onPointerUp={() => setIsPressingTab(false)}
+          onPointerCancel={() => setIsPressingTab(false)}
+          onPointerLeave={() => setIsPressingTab(false)}
+          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
             viewMode === 'tree'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -145,8 +188,13 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         </button>
 
         <button
+          data-tab-id="list"
           onClick={() => setViewMode('list')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-all shrink-0 ${
+          onPointerDown={() => setIsPressingTab(true)}
+          onPointerUp={() => setIsPressingTab(false)}
+          onPointerCancel={() => setIsPressingTab(false)}
+          onPointerLeave={() => setIsPressingTab(false)}
+          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
             viewMode === 'list'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -157,8 +205,13 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         </button>
 
         <button
+          data-tab-id="practicals"
           onClick={() => setViewMode('practicals')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-all shrink-0 ${
+          onPointerDown={() => setIsPressingTab(true)}
+          onPointerUp={() => setIsPressingTab(false)}
+          onPointerCancel={() => setIsPressingTab(false)}
+          onPointerLeave={() => setIsPressingTab(false)}
+          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
             viewMode === 'practicals'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -169,8 +222,13 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         </button>
 
         <button
+          data-tab-id="tests"
           onClick={() => setViewMode('tests')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition-all shrink-0 ${
+          onPointerDown={() => setIsPressingTab(true)}
+          onPointerUp={() => setIsPressingTab(false)}
+          onPointerCancel={() => setIsPressingTab(false)}
+          onPointerLeave={() => setIsPressingTab(false)}
+          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
             viewMode === 'tests'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -186,10 +244,12 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1">
             <span className="text-xs sm:text-sm text-[#6B7280] dark:text-[#9CA3AF]">
-              Перемещайте карту мышкой и нажимайте на доступные узлы тем, чтобы открыть конспект и пройти тест.
+              {isTeacherOrAdmin
+                ? 'Режим преподавателя: вам открыт свободный доступ к любой теме для проверки содержания, ответов и редактирования.'
+                : 'Перемещайте карту мышкой и нажимайте на доступные узлы тем, чтобы открыть конспект и пройти тест.'}
             </span>
             <div className="text-xs font-semibold text-[#2563EB] dark:text-[#60A5FA]">
-              Текущая открытая тема: {recommendedTopic.title}
+              {isTeacherOrAdmin ? 'Доступ ко всем темам открыт' : `Текущая открытая тема: ${recommendedTopic.title}`}
             </div>
           </div>
 
@@ -199,6 +259,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
             topicStatuses={progress.topicStatuses}
             grades={progress.grades}
             onSelectTopic={(topic) => setSelectedTopic(topic)}
+            isTeacher={isTeacherOrAdmin}
           />
         </div>
       ) : viewMode === 'list' ? (
@@ -209,7 +270,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
             {subject.topics.map((topic, index) => {
               const status: TopicStatus = progress.topicStatuses[topic.id] || 'locked';
               const grade = progress.grades[topic.id];
-              const isLocked = status === 'locked';
+              const isLocked = !isTeacherOrAdmin && status === 'locked';
 
               return (
                 <div
@@ -218,6 +279,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                   className={`p-4 rounded-xl border transition-all flex items-center justify-between gap-4 ${
                     status === 'completed'
                       ? 'bg-white dark:bg-[#15181E] border-emerald-500/40 hover:border-emerald-500 cursor-pointer'
+                      : isTeacherOrAdmin
+                      ? 'bg-white dark:bg-[#15181E] border-indigo-500/40 hover:border-indigo-500 hover:shadow-sm cursor-pointer'
                       : status === 'in_progress'
                       ? 'bg-blue-50/40 dark:bg-blue-950/20 border-[#2563EB] ring-1 ring-[#2563EB]/20 hover:border-[#2563EB] cursor-pointer'
                       : 'bg-gray-50/70 dark:bg-[#121418]/60 border-gray-200 dark:border-gray-800/80 opacity-60 cursor-not-allowed'
@@ -227,6 +290,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                     <span className={`text-xs font-bold px-2 py-1 rounded-md shrink-0 ${
                       status === 'completed'
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : isTeacherOrAdmin
+                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
                         : status === 'in_progress'
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
                         : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
@@ -250,6 +315,10 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                       <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                         <span>Пройдено</span>
                         {grade && <span className="font-mono">({grade.score}/10)</span>}
+                      </span>
+                    ) : isTeacherOrAdmin ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                        Ознакомиться
                       </span>
                     ) : status === 'in_progress' ? (
                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
@@ -399,7 +468,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
             const status = progress.topicStatuses[topic.id];
             const grade = progress.grades[topic.id];
             const isCompleted = status === 'completed';
-            const isLocked = status === 'locked';
+            const isLocked = !isTeacherOrAdmin && status === 'locked';
 
             return (
               <div 
@@ -419,7 +488,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                       {test.title}
                     </h3>
                     <span className="text-xs text-[#6B7280] dark:text-[#8E95A2] mt-0.5">
-                      {test.questions.length} вопросов • Время: {test.durationMinutes} мин • 1 попытка
+                      {test.questions.length} вопросов • Время: {test.durationMinutes} мин • {isTeacherOrAdmin ? 'Режим учителя (просмотр ответов)' : '1 попытка'}
                     </span>
                   </div>
                 </div>
@@ -434,16 +503,20 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                         onClick={() => setSelectedTopic(topic)}
                         className="px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                       >
-                        Разбор
+                        {isTeacherOrAdmin ? 'Просмотр вопросов' : 'Разбор'}
                       </button>
                     </div>
                   ) : (
                     <button
                       disabled={isLocked}
                       onClick={() => setSelectedTopic(topic)}
-                      className="px-5 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-semibold shadow-xs transition-colors"
+                      className={`px-5 py-2 rounded-xl text-xs font-semibold shadow-xs transition-colors ${
+                        isTeacherOrAdmin
+                          ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                          : 'bg-[#2563EB] hover:bg-blue-700 disabled:opacity-40 disabled:pointer-events-none text-white'
+                      }`}
                     >
-                      {isLocked ? 'Заблокировано' : 'Начать тест'}
+                      {isTeacherOrAdmin ? 'Ознакомиться с тестом' : isLocked ? 'Заблокировано' : 'Начать тест'}
                     </button>
                   )}
                 </div>
@@ -458,6 +531,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         <TopicModal
           topic={selectedTopic}
           isAdmin={currentUser.role === 'admin'}
+          isTeacher={currentUser.role === 'teacher'}
           onClose={() => setSelectedTopic(null)}
           onCompleteTopic={(topicId, score) => {
             onUpdateProgress(topicId, score);

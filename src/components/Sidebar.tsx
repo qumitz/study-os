@@ -1,3 +1,4 @@
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   Home, 
   Layers, 
@@ -30,14 +31,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   groupName = '37В',
   course = 3
 }) => {
+  const navRef = useRef<HTMLElement>(null);
+  const [pillStyle, setPillStyle] = useState<{ top: number; height: number; opacity: number }>({ top: 0, height: 40, opacity: 0 });
+  const [isPressing, setIsPressing] = useState<boolean>(false);
+
   const navItems = [
     { id: 'dashboard' as NavTab, label: 'Главная', icon: Home },
-    ...(currentUser?.role === 'teacher' ? [{ id: 'teacher' as NavTab, label: 'Журнал 37В', icon: Users }] : []),
+    ...(currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? [{ id: 'teacher' as NavTab, label: 'Журнал 37В', icon: Users }] : []),
     { id: 'subjects' as NavTab, label: 'Предметы', icon: Layers },
     { id: 'schedule' as NavTab, label: 'Расписание', icon: Calendar },
     { id: 'tests' as NavTab, label: 'Тесты и ОКР', icon: CheckSquare },
     { id: 'settings' as NavTab, label: 'Настройки', icon: Settings },
   ];
+
+  useEffect(() => {
+    if (!navRef.current) return;
+    const activeEl = navRef.current.querySelector<HTMLButtonElement>(`[data-nav-id="${activeTab}"]`);
+    if (activeEl) {
+      setPillStyle({
+        top: activeEl.offsetTop,
+        height: activeEl.offsetHeight,
+        opacity: 1
+      });
+    }
+  }, [activeTab]);
 
   return (
     <aside className="hidden md:flex flex-col w-60 lg:w-64 shrink-0 border-r border-[#E5E7EB] dark:border-[#262A32] bg-[#FFFFFF] dark:bg-[#121418] h-screen sticky top-0 p-4 justify-between transition-colors duration-200">
@@ -58,22 +75,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation list */}
-        <nav className="flex flex-col gap-1">
+        <nav ref={navRef} className="flex flex-col gap-1 relative">
+          {/* Sliding Liquid Glass Capsule (smoothly glides to active item in Liquid Glass mode) */}
+          <div
+            className={`liquid-pill-indicator ${isPressing ? 'is-pressed' : ''}`}
+            style={{
+              top: `${pillStyle.top}px`,
+              left: 0,
+              width: '100%',
+              height: `${pillStyle.height}px`,
+              opacity: pillStyle.opacity,
+            }}
+          />
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
+                data-nav-id={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-left ${
+                onPointerDown={() => setIsPressing(true)}
+                onPointerUp={() => setIsPressing(false)}
+                onPointerCancel={() => setIsPressing(false)}
+                onPointerLeave={() => setIsPressing(false)}
+                className={`relative z-10 flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-left liquid-elastic liquid-specular ${
                   isActive
-                    ? 'bg-[#F0F5FF] text-[#2563EB] dark:bg-[#1E293B] dark:text-[#60A5FA] font-semibold shadow-xs'
-                    : 'text-[#4B5563] dark:text-[#9CA3AF] hover:bg-[#F3F4F6] dark:hover:bg-[#1A1E24] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
+                    ? 'sidebar-nav-active text-[#2563EB] dark:text-[#60A5FA] font-semibold'
+                    : 'text-[#4B5563] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-[#2563EB] dark:text-[#60A5FA]' : 'text-[#6B7280] dark:text-[#9CA3AF]'}`} />
-                <span>{item.label}</span>
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#2563EB] dark:text-[#60A5FA]' : 'text-[#6B7280] dark:text-[#9CA3AF]'}`} />
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}

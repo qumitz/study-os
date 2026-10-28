@@ -18,13 +18,14 @@ import {
   Server,
   GraduationCap
 } from 'lucide-react';
-import { Subject, StudentProgress } from '../types';
+import { Subject, StudentProgress, User } from '../types';
 
 interface DashboardProps {
   subjects?: Subject[];
   securitySubject?: Subject;
   progress?: StudentProgress;
   allProgress?: Record<string, StudentProgress>;
+  currentUser?: User;
   onSelectSubject?: (subject: Subject) => void;
   onOpenSubject?: () => void;
   onOpenSchedule: () => void;
@@ -104,11 +105,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
   securitySubject,
   progress,
   allProgress = {},
+  currentUser,
   onSelectSubject,
   onOpenSubject,
   onOpenSchedule,
   onOpenTests
 }) => {
+  const getFirstName = (fullName?: string) => {
+    if (!fullName) return 'Студент';
+    const cleaned = fullName.trim();
+    if (cleaned.includes('Гость')) {
+      return 'Гость';
+    }
+    const parts = cleaned.split(/\s+/);
+    // In Russian names: "Фамилия Имя Отчество" -> parts[1] is given name "Денис"
+    if (parts.length >= 2 && !parts[1].startsWith('(')) {
+      return parts[1];
+    }
+    return parts[0];
+  };
+
   const subjectList: Subject[] = subjects && subjects.length > 0 
     ? subjects 
     : (securitySubject ? [securitySubject] : []);
@@ -148,7 +164,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Welcome Banner */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] dark:text-[#F3F3EF] tracking-tight">
-          Привет, Алексей! 👋
+          Привет, {getFirstName(currentUser?.name)}! 👋
         </h1>
         <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#8E95A2]">
           Учебная группа {primarySubject?.group || '37В'} • Лидский колледж УО «ГрГУ им. Янки Купалы»
@@ -299,7 +315,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {subj.title}
                     </h3>
                     <span className="text-xs text-[#6B7280] dark:text-[#8E95A2] mt-1.5 block">
-                      Преподаватель: <strong className="text-[#374151] dark:text-[#D1D5DB] font-medium">{subj.teacher}</strong>
+                      {subj.teacher.includes(',') ? 'Преподаватели: ' : 'Преподаватель: '}
+                      <strong className="text-[#374151] dark:text-[#D1D5DB] font-medium">{subj.teacher}</strong>
                     </span>
                     <span className="text-[11px] text-gray-400 mt-0.5 block">
                       {subj.totalHours} ч ({subj.theoryHours} теор. / {subj.practiceHours} практ.)
