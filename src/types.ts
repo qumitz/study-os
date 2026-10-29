@@ -112,3 +112,16 @@ export interface StudentProgress {
   topicStatuses: Record<string, TopicStatus>; // topicId -> status
   grades: Record<string, { score: number; completedAt: string; answers?: number[] }>; // topicId -> grade info
 }
+
+export interface ScheduleItem {
+  id: string;
+  dayIndex: number; // 0 = Пн, 1 = Вт, 2 = Ср, 3 = Чт, 4 = Пт, 5 = Сб, 6 = Вс
+  title: string;
+  type: string; // e.g. "Лекция", "Практическая работа", "Лабораторная работа"
+  time: string; // e.g. "08:30 - 10:00"
+  room: string; // e.g. "Ауд. 312"
+  teacher: string; // e.g. "Селедцов А.И."
+  color?: string;
+  notes?: string;
+}
+
