@@ -48,7 +48,7 @@ export const ScheduleView: React.FC = () => {
       type: 'Лекция • САПР и схемотехника',
       time: '12:00 - 13:30',
       room: 'Ауд. 308',
-      teacher: 'Селедцов А.И., Лисов А.А.',
+      teacher: 'Селедцов А.И.',
       color: 'border-l-cyan-500 bg-cyan-50/60 dark:bg-cyan-950/30'
     },
     {
