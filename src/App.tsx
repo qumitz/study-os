@@ -564,6 +564,20 @@ export default function App() {
             />
           ) : activeTab === 'schedule' ? (
             <ScheduleView currentUser={currentUser} />
+          ) : activeTab === 'labs' ? (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+              <SubjectDetail
+                subject={currentSubject}
+                progress={currentProgress}
+                currentUser={currentUser}
+                allSubjects={subjects}
+                onSelectSubject={handleSelectSubject}
+                onBack={() => setActiveTab(currentUser.role === 'teacher' ? 'teacher' : currentUser.role === 'admin' ? 'admin' : 'dashboard')}
+                onUpdateProgress={handleUpdateProgress}
+                onSaveTopic={handleSaveTopic}
+                initialViewMode="practicals"
+              />
+            </div>
           ) : activeTab === 'tests' ? (
             <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
               <SubjectDetail

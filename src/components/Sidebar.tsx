@@ -7,7 +7,8 @@ import {
   Settings,
   Users,
   GraduationCap,
-  Shield
+  Shield,
+  FileText
 } from 'lucide-react';
 import { User } from '../types';
 import { isSuperAdminEmail } from '../lib/supabase';
@@ -36,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ...(currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? [{ id: 'teacher' as NavTab, label: 'Журнал 37В', icon: Users }] : []),
     ...(isAdmin ? [{ id: 'admin' as NavTab, label: 'Управление', icon: Shield }] : []),
     { id: 'subjects' as NavTab, label: 'Предметы', icon: Layers },
+    { id: 'labs' as NavTab, label: 'Практикум', icon: FileText },
     { id: 'schedule' as NavTab, label: 'Расписание', icon: Calendar },
     { id: 'tests' as NavTab, label: 'Тесты и ОКР', icon: CheckSquare },
     { id: 'settings' as NavTab, label: 'Настройки', icon: Settings },

@@ -33,6 +33,7 @@ interface SubjectDetailProps {
   onSaveTopic?: (updatedTopic: Topic) => void;
   allSubjects?: Subject[];
   onSelectSubject?: (subjectId: string) => void;
+  initialViewMode?: 'tree' | 'list' | 'practicals' | 'tests';
 }
 
 export const SubjectDetail: React.FC<SubjectDetailProps> = ({
@@ -43,9 +44,10 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
   onUpdateProgress,
   onSaveTopic,
   allSubjects,
-  onSelectSubject
+  onSelectSubject,
+  initialViewMode
 }) => {
-  const [viewMode, setViewMode] = useState<'tree' | 'list' | 'practicals' | 'tests'>('tree');
+  const [viewMode, setViewMode] = useState<'tree' | 'list' | 'practicals' | 'tests'>(initialViewMode || 'tree');
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [activePracticalForEditor, setActivePracticalForEditor] = useState<PracticalWork | null>(null);
 
