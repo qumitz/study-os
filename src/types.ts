@@ -116,7 +116,41 @@ export interface StudentGradeRecord {
   subjectGrades?: Record<string, Record<string, number | null>>; // subjectId -> (topicId | workId) -> score 1-10
   subjectAverages?: Record<string, number>; // subjectId -> average score
   teacherNotes?: Record<string, string>; // subjectId -> optional note
+  // Date-based grades: subjectId -> 'YYYY-MM-DD' -> score (number 1..10 or string 'н' / 'уп')
+  dateGrades?: Record<string, Record<string, number | string | null>>;
+  // Test attempts history:
+  testAttempts?: Record<string, {
+    topicId: string;
+    topicCode?: string;
+    topicTitle?: string;
+    score: number;
+    completedAt: string;
+    date: string; // YYYY-MM-DD
+    correctCount?: number;
+    totalQuestions?: number;
+    answers?: Record<number, number>;
+  }[]>;
 }
+
+export interface PracticalSubmission {
+  id: string; // "sub-{studentId}-{subjectId}-{workNumber}"
+  studentId: string;
+  studentName: string;
+  group: string;
+  subjectId: string;
+  subjectTitle: string;
+  workNumber: number;
+  workTitle: string;
+  contentHtml: string;
+  submittedAt: string;
+  updatedAt: string;
+  status: 'draft' | 'submitted' | 'graded' | 'needs_revision';
+  grade?: number | null; // 1-10
+  gradedAt?: string;
+  gradedBy?: string;
+  teacherFeedback?: string;
+}
+
 
 export interface StudentProgress {
   topicStatuses: Record<string, TopicStatus>; // topicId -> status
