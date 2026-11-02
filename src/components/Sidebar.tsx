@@ -34,7 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems = [
     { id: 'dashboard' as NavTab, label: 'Главная', icon: Home },
-    ...(currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? [{ id: 'teacher' as NavTab, label: 'Журнал 37В', icon: Users }] : []),
+    ...(currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? [{ id: 'teacher' as NavTab, label: 'Журнал групп', icon: Users }] : []),
     ...(isAdmin ? [{ id: 'admin' as NavTab, label: 'Управление', icon: Shield }] : []),
     { id: 'subjects' as NavTab, label: 'Предметы', icon: Layers },
     { id: 'labs' as NavTab, label: 'Практикум', icon: FileText },

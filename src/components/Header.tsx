@@ -176,7 +176,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {badge.label}
                 </span>
                 <span className="text-[10px] text-gray-500 font-medium">
-                  Гр. {currentUser.group}
+                  {currentUser.role === 'teacher' ? 'Все группы' : `Гр. ${currentUser.group}`}
                 </span>
               </div>
             </div>
