@@ -197,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {badge.label}
                   </span>
                   <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-                    Группа: {currentUser.group}
+                    {currentUser.role === 'teacher' ? 'Доступ: Все группы' : `Группа: ${currentUser.group}`}
                   </span>
                 </div>
               </div>
