@@ -18,11 +18,9 @@ import {
   Save,
   RotateCcw,
   Edit2,
-  Users,
-  Sparkles
+  Users
 } from 'lucide-react';
 import { User, UserRole, ThemeMode } from '../types';
-import { LiquidThemeSwitcher, LiquidGooeyToggle } from './LiquidGlassControls';
 import { 
   isSupabaseConfigured, 
   getSupabaseCredentials, 
@@ -34,8 +32,6 @@ interface SettingsViewProps {
   currentUser: User;
   isDarkMode: boolean;
   setIsDarkMode: (val: boolean) => void;
-  isLiquidGlass?: boolean;
-  setIsLiquidGlass?: (val: boolean | ((prev: boolean) => boolean)) => void;
   onOpenAuth: () => void;
   onUpdateUser?: (user: User) => Promise<void> | void;
   onSwitchRole?: (role: UserRole) => void;
@@ -46,8 +42,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   currentUser,
   isDarkMode,
   setIsDarkMode,
-  isLiquidGlass = false,
-  setIsLiquidGlass,
   onOpenAuth,
   onUpdateUser,
   onSwitchRole,
@@ -448,22 +442,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </h2>
             </div>
             <span className="text-xs text-[#6B7280] dark:text-[#8E95A2]">
-              Тема: {isDarkMode ? 'Тёмная' : 'Светлая'} • Glass: {isLiquidGlass ? 'ВКЛ' : 'ВЫКЛ'}
+              Тема: {isDarkMode ? 'Тёмная' : 'Светлая'}
             </span>
           </div>
 
-          {/* 1. Выбор цветовой темы: Физический свитчер + карточки (100% сохраняет исходные темы) */}
+          {/* Выбор цветовой темы */}
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
-                  1. Базовая цветовая тема:
-                </span>
-                <span className="text-[11px] text-gray-500">
-                  Переключатель с оптическим преломлением нормалей и эластичной капсулой
-                </span>
-              </div>
-              <LiquidThemeSwitcher isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />
+            <div>
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
+                Цветовая тема оформления:
+              </span>
+              <span className="text-[11px] text-gray-500">
+                Выберите комфортную тему для работы с конспектами и тестированием
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -518,134 +509,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 {isDarkMode && <Check className="w-4 h-4 text-[#60A5FA]" />}
               </button>
-            </div>
-          </div>
-
-          {/* 2. Независимый жидкий тумблер Liquid Glass (Gooey Fluid Drop) */}
-          <div className="p-4 sm:p-5 rounded-xl border border-blue-200/80 dark:border-blue-900/40 bg-gradient-to-br from-blue-50/40 via-indigo-50/20 to-transparent dark:from-blue-950/20 dark:via-indigo-950/10 dark:to-transparent space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/25">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF]">
-                      Эффект Apple Liquid Glass
-                    </h3>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      isLiquidGlass
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 ring-1 ring-blue-500/30'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                    }`}>
-                      {isLiquidGlass ? 'ВКЛЮЧЁН' : 'ВЫКЛЮЧЕН'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                    Оптический слой: жидко-капельный тумблер (gooey physics), призматическая дисперсия света по граням, многослойные фаски и краевые преломления линз.
-                  </p>
-                </div>
-              </div>
-
-              {/* Jhey's Liquid Gooey Toggle */}
-              <LiquidGooeyToggle
-                isLiquidGlass={isLiquidGlass}
-                onToggle={() => setIsLiquidGlass && setIsLiquidGlass(!isLiquidGlass)}
-              />
-            </div>
-
-            {/* 4 Независимых режима (Быстрый выбор в 1 клик) */}
-            <div className="pt-3 border-t border-blue-100 dark:border-blue-900/30 space-y-2">
-              <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block">
-                Все 4 независимые комбинации оформления (быстрое переключение):
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {/* Mode 1: Light Classic */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDarkMode(false);
-                    if (setIsLiquidGlass) setIsLiquidGlass(false);
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    !isDarkMode && !isLiquidGlass
-                      ? 'border-blue-600 bg-white shadow-sm ring-2 ring-blue-500/20'
-                      : 'border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-black/20 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-[11px] font-bold text-gray-900 dark:text-gray-200">1. Светлая</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">Классика (100%)</div>
-                </button>
-
-                {/* Mode 2: Dark Classic */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDarkMode(true);
-                    if (setIsLiquidGlass) setIsLiquidGlass(false);
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    isDarkMode && !isLiquidGlass
-                      ? 'border-blue-500 bg-[#121418] shadow-sm ring-2 ring-blue-500/20'
-                      : 'border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-black/20 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-[11px] font-bold text-gray-900 dark:text-gray-200">2. Тёмная</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">Классика (100%)</div>
-                </button>
-
-                {/* Mode 3: Light + Liquid Glass */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDarkMode(false);
-                    if (setIsLiquidGlass) setIsLiquidGlass(true);
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    !isDarkMode && isLiquidGlass
-                      ? 'border-blue-600 bg-gradient-to-br from-white/90 to-blue-50/90 shadow-sm ring-2 ring-blue-500/30'
-                      : 'border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-black/20 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-[11px] font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1">
-                    <span>3. Светлая + Glass</span>
-                  </div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">Хрусталь visionOS</div>
-                </button>
-
-                {/* Mode 4: Dark + Liquid Glass */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDarkMode(true);
-                    if (setIsLiquidGlass) setIsLiquidGlass(true);
-                  }}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    isDarkMode && isLiquidGlass
-                      ? 'border-blue-400 bg-gradient-to-br from-blue-950/70 to-slate-900/90 shadow-sm ring-2 ring-blue-400/30'
-                      : 'border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-black/20 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-[11px] font-bold text-blue-400 flex items-center gap-1">
-                    <span>4. Тёмная + Glass</span>
-                  </div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">Обсидиан и сапфир</div>
-                </button>
-              </div>
-            </div>
-
-            {/* Current combination status */}
-            <div className="pt-2 border-t border-blue-100 dark:border-blue-900/30 flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-              <span>Текущее сочетание:</span>
-              <span className="font-semibold text-[#2563EB] dark:text-[#60A5FA]">
-                {isLiquidGlass
-                  ? isDarkMode
-                    ? '4. Тёмный интерфейс с Liquid Glass (Обсидиан)'
-                    : '3. Светлый интерфейс с Liquid Glass (Хрусталь)'
-                  : isDarkMode
-                  ? '2. Исходная тёмная тема (Классика)'
-                  : '1. Исходная светлая тема (Классика)'}
-              </span>
             </div>
           </div>
         </div>

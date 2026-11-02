@@ -1,15 +1,24 @@
 import { createClient, SupabaseClient, User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { User, UserRole, StudentProgress, TopicStatus, StudentGradeRecord } from '../types';
 
-// Read config from Vite env variables or localStorage override
+// Default project credentials for Study OS (public client config)
+const DEFAULT_SUPABASE_URL = 'https://poxzqzsralyqydbgazoy.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_tQFkeJhvqBjuhXqPdMaGdg_I7MeGg2g';
+
+// Read config from Vite env variables, localStorage override, or default project credentials
 export const getSupabaseCredentials = () => {
   const envUrl = import.meta.env.VITE_SUPABASE_URL;
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const localUrl = localStorage.getItem('study_os_supabase_url');
   const localKey = localStorage.getItem('study_os_supabase_key');
 
-  const url = (envUrl && envUrl !== 'https://your-project.supabase.co') ? envUrl : (localUrl || '');
-  const key = (envKey && envKey !== 'your-anon-key') ? envKey : (localKey || '');
+  const url = (envUrl && envUrl !== 'https://your-project.supabase.co') 
+    ? envUrl 
+    : (localUrl || DEFAULT_SUPABASE_URL);
+
+  const key = (envKey && envKey !== 'your-anon-key') 
+    ? envKey 
+    : (localKey || DEFAULT_SUPABASE_ANON_KEY);
 
   return { url: url.trim(), key: key.trim() };
 };

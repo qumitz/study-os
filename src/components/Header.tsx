@@ -5,8 +5,6 @@ import { User, UserRole } from '../types';
 interface HeaderProps {
   isDarkMode: boolean;
   setIsDarkMode: (val: boolean) => void;
-  isLiquidGlass?: boolean;
-  setIsLiquidGlass?: (val: boolean | ((prev: boolean) => boolean)) => void;
   currentUser: User;
   onOpenAuth: () => void;
   onSwitchRole: (role: UserRole) => void;
@@ -19,8 +17,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   isDarkMode,
   setIsDarkMode,
-  isLiquidGlass = false,
-  setIsLiquidGlass,
   currentUser,
   onOpenAuth,
   onSwitchRole,
@@ -82,7 +78,7 @@ export const Header: React.FC<HeaderProps> = ({
         </kbd>
       </div>
 
-      {/* Right controls: Theme toggle, Liquid Glass, Notifications, Profile Menu */}
+      {/* Right controls: Theme toggle, Notifications, Profile Menu */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Color Theme toggle: Light / Dark */}
         <button
@@ -91,26 +87,6 @@ export const Header: React.FC<HeaderProps> = ({
           className="p-2 rounded-xl text-[#4B5563] dark:text-[#9CA3AF] hover:bg-[#F3F4F6] dark:hover:bg-[#1A1E24] hover:text-[#111827] dark:hover:text-[#F3F3EF] border border-transparent hover:border-[#E5E7EB] dark:hover:border-[#262A32] transition-all cursor-pointer"
         >
           {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-[#4B5563]" />}
-        </button>
-
-        {/* Independent Apple Liquid Glass toggle */}
-        <button
-          onClick={() => setIsLiquidGlass && setIsLiquidGlass(prev => !prev)}
-          title={
-            isLiquidGlass
-              ? 'Эффект Apple Liquid Glass: ВКЛЮЧЁН (нажмите для выключения)'
-              : 'Эффект Apple Liquid Glass: ВЫКЛЮЧЕН (нажмите для включения)'
-          }
-          className={`px-2.5 py-1.5 rounded-xl transition-all cursor-pointer border flex items-center gap-1.5 select-none ${
-            isLiquidGlass
-              ? 'liquid-glass-btn text-blue-600 dark:text-blue-300 border-blue-400/50 shadow-sm shadow-blue-500/25 ring-1 ring-blue-400/30'
-              : 'text-[#6B7280] dark:text-[#9CA3AF] hover:bg-[#F3F4F6] dark:hover:bg-[#1A1E24] hover:text-[#111827] dark:hover:text-[#F3F3EF] border-transparent hover:border-[#E5E7EB] dark:hover:border-[#262A32]'
-          }`}
-        >
-          <Sparkles className={`w-4 h-4 ${isLiquidGlass ? 'text-blue-500 animate-pulse' : 'text-gray-400'}`} />
-          <span className="hidden sm:inline text-xs font-semibold">
-            {isLiquidGlass ? 'Liquid Glass' : 'Glass OFF'}
-          </span>
         </button>
 
         {/* Notifications */}

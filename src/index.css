@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "./styles/liquid-glass.css";
+/* Liquid Glass styles temporarily disabled per user instruction (file preserved in src/styles/liquid-glass.css) */
+/* @import "./styles/liquid-glass.css"; */
 
 @custom-variant dark (&:where(.dark, .dark *));
 

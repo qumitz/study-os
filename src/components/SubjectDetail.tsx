@@ -40,29 +40,6 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
   const [viewMode, setViewMode] = useState<'tree' | 'list' | 'practicals' | 'tests'>('tree');
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
 
-  // Sliding pill indicator for Liquid Glass view tabs
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const [tabPillStyle, setTabPillStyle] = useState<{ left: number; width: number; height: number; opacity: number }>({
-    left: 0,
-    width: 0,
-    height: 38,
-    opacity: 0
-  });
-  const [isPressingTab, setIsPressingTab] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!tabsRef.current) return;
-    const activeEl = tabsRef.current.querySelector<HTMLButtonElement>(`[data-tab-id="${viewMode}"]`);
-    if (activeEl) {
-      setTabPillStyle({
-        left: activeEl.offsetLeft,
-        width: activeEl.offsetWidth,
-        height: activeEl.offsetHeight,
-        opacity: 1
-      });
-    }
-  }, [viewMode]);
-
   // Compute progress statistics
   const isTeacherOrAdmin = currentUser.role === 'teacher' || currentUser.role === 'admin';
   const totalTopics = subject.topics.length;
@@ -152,29 +129,11 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
       </div>
 
       {/* View Switcher Tabs (Tree, List, Practicals, Tests) */}
-      <div ref={tabsRef} className="subject-tabs flex items-center gap-1.5 border-b border-[#E5E7EB] dark:border-[#262A32] pb-1 overflow-x-auto relative">
-        {/* Sliding Liquid Glass Capsule (smoothly glides to active tab in Liquid Glass mode) */}
-        <div
-          className={`liquid-pill-indicator ${isPressingTab ? 'is-pressed' : ''}`}
-          style={{
-            left: `${tabPillStyle.left}px`,
-            width: `${tabPillStyle.width}px`,
-            height: `${tabPillStyle.height}px`,
-            top: 0,
-            bottom: 0,
-            margin: 'auto 0',
-            opacity: tabPillStyle.opacity,
-          }}
-        />
+      <div className="flex items-center gap-1.5 border-b border-[#E5E7EB] dark:border-[#262A32] pb-1 overflow-x-auto">
 
         <button
-          data-tab-id="tree"
           onClick={() => setViewMode('tree')}
-          onPointerDown={() => setIsPressingTab(true)}
-          onPointerUp={() => setIsPressingTab(false)}
-          onPointerCancel={() => setIsPressingTab(false)}
-          onPointerLeave={() => setIsPressingTab(false)}
-          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-t-xl transition-all shrink-0 ${
             viewMode === 'tree'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -188,13 +147,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         </button>
 
         <button
-          data-tab-id="list"
           onClick={() => setViewMode('list')}
-          onPointerDown={() => setIsPressingTab(true)}
-          onPointerUp={() => setIsPressingTab(false)}
-          onPointerCancel={() => setIsPressingTab(false)}
-          onPointerLeave={() => setIsPressingTab(false)}
-          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-t-xl transition-all shrink-0 ${
             viewMode === 'list'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -205,13 +159,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         </button>
 
         <button
-          data-tab-id="practicals"
           onClick={() => setViewMode('practicals')}
-          onPointerDown={() => setIsPressingTab(true)}
-          onPointerUp={() => setIsPressingTab(false)}
-          onPointerCancel={() => setIsPressingTab(false)}
-          onPointerLeave={() => setIsPressingTab(false)}
-          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-t-xl transition-all shrink-0 ${
             viewMode === 'practicals'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -222,13 +171,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         </button>
 
         <button
-          data-tab-id="tests"
           onClick={() => setViewMode('tests')}
-          onPointerDown={() => setIsPressingTab(true)}
-          onPointerUp={() => setIsPressingTab(false)}
-          onPointerCancel={() => setIsPressingTab(false)}
-          onPointerLeave={() => setIsPressingTab(false)}
-          className={`relative z-10 flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-xl transition-all shrink-0 liquid-elastic liquid-specular ${
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold border-b-2 rounded-t-xl transition-all shrink-0 ${
             viewMode === 'tests'
               ? 'border-[#2563EB] text-[#2563EB] dark:text-[#60A5FA]'
               : 'border-transparent text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
