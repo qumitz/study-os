@@ -183,12 +183,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             )}
 
             <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-100 dark:border-gray-800 space-y-1">
-              <span className="text-[11px] font-medium text-gray-500">Учебная группа</span>
+              <span className="text-[11px] font-medium text-gray-500">
+                {currentUser.role === 'teacher' ? 'Учебные группы' : 'Учебная группа'}
+              </span>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-[#2563EB] dark:text-[#60A5FA]">
-                  {currentUser.group}
+                  {currentUser.role === 'teacher' ? 'Все группы колледжа' : currentUser.group}
                 </span>
-                <span className="text-xs text-gray-400">• {currentUser.course} курс</span>
+                {currentUser.role !== 'teacher' && (
+                  <span className="text-xs text-gray-400">• {currentUser.course} курс</span>
+                )}
               </div>
               <p className="text-[11px] text-gray-500 truncate">
                 Лидский колледж УО «ГрГУ им. Янки Купалы»
@@ -199,7 +203,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800/80">
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Lock className="w-3.5 h-3.5 text-gray-400" />
-              <span>Выбор групп настроен на 37В (пилотный курс ПОИТ/ТЭСВТ)</span>
+              <span>
+                {currentUser.role === 'teacher' 
+                  ? 'Преподавателю доступны журналы всех групп колледжа'
+                  : `Выбор группы: ${currentUser.group} (ПОИТ/ТЭСВТ)`}
+              </span>
             </div>
             <button
               onClick={onOpenAuth}
