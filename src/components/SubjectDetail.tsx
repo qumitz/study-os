@@ -23,7 +23,13 @@ interface SubjectDetailProps {
   progress: StudentProgress;
   currentUser: User;
   onBack: () => void;
-  onUpdateProgress: (topicId: string, score: number) => void;
+  onUpdateProgress: (
+    topicId: string, 
+    score: number,
+    answers?: Record<number, number>,
+    correctCount?: number,
+    totalQuestions?: number
+  ) => void;
   onSaveTopic?: (updatedTopic: Topic) => void;
   allSubjects?: Subject[];
   onSelectSubject?: (subjectId: string) => void;
@@ -514,8 +520,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
           isAdmin={currentUser.role === 'admin'}
           isTeacher={currentUser.role === 'teacher'}
           onClose={() => setSelectedTopic(null)}
-          onCompleteTopic={(topicId, score) => {
-            onUpdateProgress(topicId, score);
+          onCompleteTopic={(topicId, score, answers, correctCount, totalQuestions) => {
+            onUpdateProgress(topicId, score, answers, correctCount, totalQuestions);
           }}
           onSaveTopic={(updated) => {
             setSelectedTopic(updated);

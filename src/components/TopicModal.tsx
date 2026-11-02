@@ -20,7 +20,13 @@ import { SynopsisViewer } from './SynopsisViewer';
 interface TopicModalProps {
   topic: Topic | null;
   onClose: () => void;
-  onCompleteTopic: (topicId: string, score: number) => void;
+  onCompleteTopic: (
+    topicId: string, 
+    score: number,
+    answers?: Record<number, number>,
+    correctCount?: number,
+    totalQuestions?: number
+  ) => void;
   isCompleted: boolean;
   savedGrade?: { score: number; completedAt: string };
   isAdmin?: boolean;
@@ -100,7 +106,13 @@ export const TopicModal: React.FC<TopicModalProps> = ({
 
     setTestScore(calculatedScore);
     setTestFinished(true);
-    onCompleteTopic(topic.id, calculatedScore);
+    onCompleteTopic(
+      topic.id, 
+      calculatedScore, 
+      selectedAnswers, 
+      correctCount, 
+      test.questions.length
+    );
   };
 
   const formatTime = (seconds: number) => {

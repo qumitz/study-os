@@ -100,52 +100,53 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#EF4444] ring-2 ring-white dark:ring-[#121418]"></span>
         </button>
 
-        {/* Quick Role Switcher for Everyone */}
-        <div className="hidden sm:flex items-center gap-1 p-0.5 rounded-xl bg-gray-100 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-xs">
-          <button
-            type="button"
-            onClick={() => onSwitchRole('student')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              currentUser.role === 'student'
-                ? 'bg-white dark:bg-[#252B35] text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-            }`}
-            title="Переключиться в режим Студента"
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>Студент</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onSwitchRole('teacher')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              currentUser.role === 'teacher'
-                ? 'bg-white dark:bg-[#252B35] text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-            }`}
-            title="Переключиться в режим Преподавателя"
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Преподаватель</span>
-          </button>
-          {(isSuperAdmin || currentUser.role === 'admin') && (
-            <button
-              type="button"
-              onClick={() => onSwitchRole('admin')}
-              className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
-                currentUser.role === 'admin'
-                  ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shadow-xs border border-rose-200 dark:border-rose-900/60'
-                  : 'text-rose-500 hover:text-rose-700'
-              }`}
-              title="Режим Администратора"
-            >
-              <Shield className="w-3 h-3 text-rose-500" />
-              <span>Админ</span>
-            </button>
-          )}
-        </div>
-
-        <div className="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-1"></div>
+        {/* Quick Role Switcher (Visible only for Administrator) */}
+        {isAdmin && (
+          <>
+            <div className="hidden sm:flex items-center gap-1 p-0.5 rounded-xl bg-gray-100 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-xs">
+              <button
+                type="button"
+                onClick={() => onSwitchRole('student')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  currentUser.role === 'student'
+                    ? 'bg-white dark:bg-[#252B35] text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Переключиться в режим Студента"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span>Студент</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSwitchRole('teacher')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  currentUser.role === 'teacher'
+                    ? 'bg-white dark:bg-[#252B35] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+                }`}
+                title="Переключиться в режим Преподавателя"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Преподаватель</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSwitchRole('admin')}
+                className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                  currentUser.role === 'admin'
+                    ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shadow-xs border border-rose-200 dark:border-rose-900/60'
+                    : 'text-rose-500 hover:text-rose-700'
+                }`}
+                title="Режим Администратора"
+              >
+                <Shield className="w-3 h-3 text-rose-500" />
+                <span>Админ</span>
+              </button>
+            </div>
+            <div className="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-1"></div>
+          </>
+        )}
 
         {/* Profile with Interactive Dropdown */}
         <div className="relative" ref={dropdownRef}>
@@ -201,53 +202,43 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              {/* Role switcher for Everyone */}
-              <div className="space-y-1.5 pt-1 border-t border-gray-100 dark:border-gray-800">
-                <div className="flex items-center justify-between px-0.5">
-                  <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                    <Shield className="w-3 h-3 text-blue-500" />
-                    Режим роли:
-                  </span>
-                  <span className="text-[10px] font-semibold text-gray-400">
-                    {currentUser.role === 'admin' ? 'Администратор' : currentUser.role === 'teacher' ? 'Преподаватель' : 'Студент'}
-                  </span>
+              {/* Role switcher (Only for Administrator) */}
+              {isAdmin && (
+                <div className="space-y-1.5 pt-1 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-blue-500" />
+                      Режим роли:
+                    </span>
+                    <span className="text-[10px] font-semibold text-gray-400">
+                      {currentUser.role === 'admin' ? 'Администратор' : currentUser.role === 'teacher' ? 'Преподаватель' : 'Студент'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(['student', 'teacher', 'admin'] as UserRole[]).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          onSwitchRole(r);
+                          setProfileOpen(false);
+                        }}
+                        className={`py-1 px-1.5 text-[10px] rounded-lg font-semibold transition-colors cursor-pointer ${
+                          currentUser.role === r
+                            ? r === 'admin'
+                              ? 'bg-rose-600 text-white shadow-xs'
+                              : 'bg-blue-600 text-white shadow-xs'
+                            : r === 'admin'
+                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {r === 'student' ? 'Студент' : r === 'teacher' ? 'Преподаватель' : 'Админ'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className={`grid gap-1 ${(isSuperAdmin || currentUser.role === 'admin') ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                  {(['student', 'teacher'] as UserRole[]).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        onSwitchRole(r);
-                        setProfileOpen(false);
-                      }}
-                      className={`py-1 px-1.5 text-[10px] rounded-lg font-semibold transition-colors cursor-pointer ${
-                        currentUser.role === r
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {r === 'student' ? 'Студент' : 'Преподаватель'}
-                    </button>
-                  ))}
-                  {(isSuperAdmin || currentUser.role === 'admin') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSwitchRole('admin');
-                        setProfileOpen(false);
-                      }}
-                      className={`py-1 px-1.5 text-[10px] rounded-lg font-semibold transition-colors cursor-pointer ${
-                        currentUser.role === 'admin'
-                          ? 'bg-rose-600 text-white shadow-xs'
-                          : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
-                      }`}
-                    >
-                      Админ
-                    </button>
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* Guest banner / permanent account link */}
               {(!currentUser.email || currentUser.id.startsWith('usr-guest-')) && (

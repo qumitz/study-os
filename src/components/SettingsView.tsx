@@ -3,29 +3,22 @@ import {
   User as UserIcon, 
   Moon, 
   Sun, 
-  Monitor, 
   ShieldCheck, 
   GraduationCap, 
   Check, 
   Lock, 
-  Volume2, 
   Info,
   LogOut,
   Sliders,
   Type,
-  Database,
-  ExternalLink,
-  Save,
-  RotateCcw,
   Edit2,
   Users
 } from 'lucide-react';
-import { User, UserRole, ThemeMode } from '../types';
+import { User, UserRole } from '../types';
 import { 
   isSupabaseConfigured, 
-  getSupabaseCredentials, 
-  setSupabaseCredentials,
-  updateUserProfileName 
+  updateUserProfileName,
+  isSuperAdminEmail 
 } from '../lib/supabase';
 
 interface SettingsViewProps {
@@ -56,6 +49,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [fullNameInput, setFullNameInput] = useState<string>(currentUser.name || '');
   const [isSavingName, setIsSavingName] = useState<boolean>(false);
   const [nameSaveFeedback, setNameSaveFeedback] = useState<string | null>(null);
+
+  const isAdmin = isSuperAdmin || currentUser.role === 'admin' || isSuperAdminEmail(currentUser.email, currentUser.name);
 
   useEffect(() => {
     setFullNameInput(currentUser.name || '');
@@ -88,30 +83,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setNameSaveFeedback(null), 3500);
   };
 
-  // Supabase connection state in settings
-  const [hasSupabase, setHasSupabase] = useState<boolean>(isSupabaseConfigured());
-  const [dbUrl, setDbUrl] = useState<string>(getSupabaseCredentials().url);
-  const [dbKey, setDbKey] = useState<string>(getSupabaseCredentials().key);
-  const [isEditingDb, setIsEditingDb] = useState<boolean>(false);
-  const [dbSavedMessage, setDbSavedMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setHasSupabase(isSupabaseConfigured());
-    const creds = getSupabaseCredentials();
-    setDbUrl(creds.url);
-    setDbKey(creds.key);
-  }, []);
-
-  const handleSaveDbSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSupabaseCredentials(dbUrl, dbKey);
-    const configured = isSupabaseConfigured();
-    setHasSupabase(configured);
-    setIsEditingDb(false);
-    setDbSavedMessage(configured ? 'Параметры Supabase успешно сохранены!' : 'Настройки сброшены на локальный режим');
-    setTimeout(() => setDbSavedMessage(null), 3000);
-  };
-
   return (
     <div className="flex flex-col gap-8 p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full animate-in fade-in duration-200">
       {/* Header */}
@@ -125,7 +96,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </h1>
         </div>
         <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#8E95A2]">
-          Управление профилем, базой данных Supabase, оформлением и параметрами обучения
+          Управление профилем, оформлением и параметрами обучения
         </p>
       </div>
 
@@ -240,61 +211,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Role & Access Mode Management for Everyone */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center">
-                <ShieldCheck className="w-4 h-4" />
+        {/* Role & Access Mode Management - Strictly for Administrator */}
+        {isAdmin && (
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                    Режим доступа и роль в системе
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    Переключение между студенческим кабинетом, журналом преподавателя и управлением
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
-                  Режим доступа и роль в системе
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Переключение между студенческим кабинетом, журналом преподавателя и управлением
-                </p>
-              </div>
-            </div>
-            {(isSuperAdmin || currentUser.role === 'admin') && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
                 Super Admin
               </span>
-            )}
-          </div>
+            </div>
 
-          <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-100 dark:border-gray-800 space-y-2">
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
-              Выберите активный режим:
-            </span>
-            <div className={`grid grid-cols-1 ${(isSuperAdmin || currentUser.role === 'admin') ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
-              <button
-                type="button"
-                onClick={() => onSwitchRole && onSwitchRole('student')}
-                className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  currentUser.role === 'student'
-                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500/20'
-                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#1E232B]'
-                }`}
-              >
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span>Режим Студента</span>
-              </button>
+            <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-100 dark:border-gray-800 space-y-2">
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
+                Выберите активный режим:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSwitchRole && onSwitchRole('student')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    currentUser.role === 'student'
+                      ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500/20'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#1E232B]'
+                  }`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>Режим Студента</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => onSwitchRole && onSwitchRole('teacher')}
-                className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                  currentUser.role === 'teacher'
-                    ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500/20'
-                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#1E232B]'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Режим Преподавателя</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSwitchRole && onSwitchRole('teacher')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    currentUser.role === 'teacher'
+                      ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500/20'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#1E232B]'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Режим Преподавателя</span>
+                </button>
 
-              {(isSuperAdmin || currentUser.role === 'admin') && (
                 <button
                   type="button"
                   onClick={() => onSwitchRole && onSwitchRole('admin')}
@@ -307,132 +276,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>Режим Администратора</span>
                 </button>
-              )}
+              </div>
+              <p className="text-[11px] text-gray-400 pt-1">
+                В режиме Преподавателя доступен журнал группы 37В, карточки учащихся и редактирование конспектов с иллюстрациями. В режиме Студента — прохождение тестов и изучение материалов.
+              </p>
             </div>
-            <p className="text-[11px] text-gray-400 pt-1">
-              В режиме Преподавателя доступен журнал группы 37В, карточки учащихся и редактирование конспектов с иллюстрациями. В режиме Студента — прохождение тестов и изучение материалов.
-            </p>
           </div>
-        </div>
+        )}
 
-        {/* Section 2: Облачная база данных Supabase */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Database className="w-4 h-4 text-[#2563EB] dark:text-[#60A5FA]" />
-              <h2 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
-                Облачная база данных (Supabase)
-              </h2>
-            </div>
-            {hasSupabase ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/40">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Подключено (Онлайн)
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/40">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                Локальный режим
-              </span>
-            )}
-          </div>
-
-          <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#8E95A2] leading-relaxed">
-            Supabase обеспечивает реальную регистрацию студентов и преподавателей, вход через пароль и Google, а также синхронизацию прогресса и оценок между всеми устройствами группы.
-          </p>
-
-          {dbSavedMessage && (
-            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300">
-              {dbSavedMessage}
-            </div>
-          )}
-
-          {!isEditingDb ? (
-            <div className="p-4 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <span className="text-[11px] font-medium text-gray-500 block">Статус подключения:</span>
-                <p className="text-xs font-mono text-[#111827] dark:text-[#F3F3EF]">
-                  {hasSupabase ? dbUrl : 'Ключи Supabase не заданы (работает оффлайн-демо)'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsEditingDb(true)}
-                className="px-3.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-semibold text-[#111827] dark:text-[#F3F3EF] hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-              >
-                {hasSupabase ? 'Изменить ключи' : 'Подключить Supabase'}
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSaveDbSettings} className="p-4 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
-                  Supabase Project URL:
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://xyzproject.supabase.co"
-                  value={dbUrl}
-                  onChange={(e) => setDbUrl(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-[#121418] border border-gray-200 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
-                  Supabase Anon (Public) Key:
-                </label>
-                <input
-                  type="password"
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  value={dbKey}
-                  onChange={(e) => setDbKey(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-[#121418] border border-gray-200 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Сохранить подключение</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingDb(false)}
-                  className="px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 cursor-pointer"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDbUrl('');
-                    setDbKey('');
-                    setSupabaseCredentials('', '');
-                    setHasSupabase(false);
-                    setIsEditingDb(false);
-                    setDbSavedMessage('Настройки сброшены');
-                    setTimeout(() => setDbSavedMessage(null), 2000);
-                  }}
-                  className="ml-auto px-2.5 py-1.5 text-xs text-rose-500 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Очистить</span>
-                </button>
-              </div>
-            </form>
-          )}
-
-          <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
-            <Info className="w-3.5 h-3.5 shrink-0" />
-            <span>Скрипт создания таблиц находится в файле <code className="text-blue-500">supabase/schema.sql</code>. Его достаточно один раз вставить в SQL Editor на supabase.com.</span>
-          </div>
-        </div>
-
-        {/* Section 3: Оформление и тема */}
+        {/* Section 2: Оформление и тема */}
         <div className="p-6 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-6">
           <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800/80 pb-4">
             <div className="flex items-center gap-2.5">
@@ -513,7 +365,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 4: Комфорт чтения конспектов */}
+        {/* Section 3: Комфорт чтения конспектов */}
         <div className="p-6 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-5">
           <div className="flex items-center gap-2.5">
             <Type className="w-4 h-4 text-[#2563EB] dark:text-[#60A5FA]" />
@@ -580,7 +432,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 5: Защита данных и прогресса */}
+        {/* Section 4: Защита данных и прогресса */}
         <div className="p-6 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -605,7 +457,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Section 6: О платформе */}
+        {/* Section 5: О платформе */}
         <div className="p-5 rounded-2xl bg-gray-50/70 dark:bg-[#14161C] border border-[#E5E7EB] dark:border-[#262A32] flex items-center justify-between text-xs text-gray-500">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-4 h-4 text-blue-500" />

@@ -96,15 +96,65 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
   const [formColorId, setFormColorId] = useState<string>('blue');
   const [formNotes, setFormNotes] = useState<string>('');
 
-  const days = [
-    { day: 'Пн', fullDay: 'Понедельник', date: '11', isToday: false },
-    { day: 'Вт', fullDay: 'Вторник', date: '12', isToday: true },
-    { day: 'Ср', fullDay: 'Среда', date: '13', isToday: false },
-    { day: 'Чт', fullDay: 'Четверг', date: '14', isToday: false },
-    { day: 'Пт', fullDay: 'Пятница', date: '15', isToday: false },
-    { day: 'Сб', fullDay: 'Суббота', date: '16', isToday: false },
-    { day: 'Вс', fullDay: 'Воскресенье', date: '17', isToday: false },
-  ];
+  // Real calendar week state (defaults to today)
+  const [currentWeekDate, setCurrentWeekDate] = useState<Date>(() => new Date());
+
+  // Helper to get Monday of the selected week
+  const getMonday = (d: Date) => {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    date.setDate(diff);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
+  const monday = getMonday(currentWeekDate);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const dayDate = new Date(monday);
+    dayDate.setDate(monday.getDate() + i);
+    dayDate.setHours(0, 0, 0, 0);
+    const isToday = dayDate.getTime() === today.getTime();
+    const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    const fullDayNames = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+
+    return {
+      day: dayNames[i],
+      fullDay: fullDayNames[i],
+      date: dayDate.getDate().toString(),
+      monthShort: dayDate.toLocaleDateString('ru-RU', { month: 'short' }),
+      dateStr: dayDate.toISOString().split('T')[0],
+      isToday
+    };
+  });
+
+  const weekRangeText = `${monday.getDate()} ${monday.toLocaleDateString('ru-RU', { month: 'short' })} — ${sunday.getDate()} ${sunday.toLocaleDateString('ru-RU', { month: 'short' })} ${sunday.getFullYear()}`;
+
+  const handlePrevWeek = () => {
+    setCurrentWeekDate(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() - 7);
+      return d;
+    });
+  };
+
+  const handleNextWeek = () => {
+    setCurrentWeekDate(prev => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + 7);
+      return d;
+    });
+  };
+
+  const handleTodayWeek = () => {
+    setCurrentWeekDate(new Date());
+  };
 
   const handleOpenAddModal = (dayIndex = 0) => {
     setEditingItemId(null);
@@ -263,16 +313,32 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
 
           {/* Week Pagination */}
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 text-xs font-medium">
-            <button className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors">
+            <button 
+              onClick={handlePrevWeek}
+              title="Предыдущая неделя"
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="px-2 font-semibold text-[#111827] dark:text-[#F3F3EF]">
-              11 — 17 ноября 2026
+              {weekRangeText}
             </span>
-            <button className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors">
+            <button 
+              onClick={handleNextWeek}
+              title="Следующая неделя"
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer"
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+
+          <button 
+            type="button"
+            onClick={handleTodayWeek}
+            className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#15181E] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer shadow-xs"
+          >
+            Текущая неделя
+          </button>
         </div>
       </div>
 

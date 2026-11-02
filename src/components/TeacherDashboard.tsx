@@ -1,52 +1,67 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, 
-  BookOpen, 
-  Award, 
-  RotateCcw, 
   Search, 
-  AlertTriangle, 
-  CheckCircle2, 
-  TrendingUp, 
+  GraduationCap, 
+  Award, 
+  ChevronRight, 
+  Layers, 
+  RotateCcw, 
+  Check, 
+  X, 
+  AlertTriangle,
   FileSpreadsheet,
-  Database,
-  X,
-  ChevronRight,
-  GraduationCap,
+  ExternalLink,
+  BookOpen,
+  Calendar,
+  Clock,
   Sparkles,
-  FlaskConical,
-  HelpCircle,
+  Database,
+  CheckCircle2,
   FileText,
-  Layers,
-  Save,
-  ExternalLink
+  Filter,
+  Eye,
+  Send,
+  MessageSquare
 } from 'lucide-react';
-import { StudentGradeRecord, Subject, Topic, PracticalWork } from '../types';
-import { isSupabaseConfigured, fetchGroupStudentsFromDb } from '../lib/supabase';
-import { getRegisteredStudentsForGroup, saveGroupStudents, mergeStudentRecords } from '../lib/studentRegistry';
+import { StudentGradeRecord, Subject, Topic, PracticalWork, PracticalSubmission } from '../types';
+import { 
+  getRegisteredStudentsForGroup, 
+  saveGroupStudents, 
+  mergeStudentRecords,
+  updateStudentDateGrade,
+  getStudentDateGrades,
+  ACADEMIC_MONTHS,
+  AcademicMonth
+} from '../lib/studentRegistry';
+import { 
+  isSupabaseConfigured, 
+  fetchGroupStudentsFromDb 
+} from '../lib/supabase';
 import { getAvailableGroups } from '../lib/groupRegistry';
+import { 
+  getGroupPracticalSubmissions, 
+  gradePracticalSubmission, 
+  requestRevisionPracticalSubmission 
+} from '../lib/practicalSubmissionRegistry';
 
 export interface TeacherDashboardProps {
   subject: Subject;
   currentUserGroup: string;
   allSubjects?: Subject[];
-  onSelectSubject?: (subjectOrId: string | Subject) => void;
+  onSelectSubject?: (subject: Subject) => void;
 }
 
-// Friendly titles for all 8 curriculum disciplines
-export const getSubjectFriendlyName = (s: Subject): string => {
+// Helper: Format subject short title for college tabs
+const getSubjectFriendlyName = (s: Subject): string => {
   const map: Record<string, string> = {
-    secbasics: 'Основы ИБ',
-    pms: 'Микропроцессоры',
-    tesvt: 'Техн. эксплуатация',
-    network: 'Сетевые технологии',
-    stoi: 'Сетевые технологии',
-    transmission: 'Системы передачи',
-    pspi: 'Системы передачи',
-    mobile: 'Мобильная разработка',
-    rmp: 'Мобильная разработка',
     cad: 'САПР',
-    sapr: 'САПР',
+    network: 'Сетевые технологии',
+    maintenance: 'Техническая экспл.',
+    microprocessor: 'Микропроцессоры',
+    mobile: 'Моб. приложения',
+    transmission: 'Технологии передачи',
+    secbasics: 'Информ. безопасность',
     tsi: 'Техн. средства информ.'
   };
   return map[s.id] || s.shortTitle || s.code || s.title;
@@ -58,6 +73,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   allSubjects = [],
   onSelectSubject
 }) => {
+  // Available groups
+  const availableGroups = getAvailableGroups();
+  const [activeGroup, setActiveGroup] = useState<string>(currentUserGroup || '37В');
+
+  // Subtabs state: calendar journal / test results / practical reviews
+  const [activeSubTab, setActiveSubTab] = useState<'calendar_journal' | 'test_results' | 'practical_reviews'>('calendar_journal');
+
+  // Academic month state for calendar journal: defaults to November 2026 ('2026-11')
+  const [selectedMonthId, setSelectedMonthId] = useState<string>('2026-11');
+  const currentAcademicMonth: AcademicMonth = useMemo(() => {
+    return ACADEMIC_MONTHS.find(m => m.id === selectedMonthId) || ACADEMIC_MONTHS[2];
+  }, [selectedMonthId]);
+
   // Use allSubjects list or fallback to current subject
   const subjectsList = useMemo(() => {
     return allSubjects.length > 0 ? allSubjects : [subject];
@@ -69,33 +97,48 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return subjectsList.find(s => s.id === activeSubjectId) || subject;
   }, [subjectsList, activeSubjectId, subject]);
 
-  const availableGroups = getAvailableGroups();
-  const [activeGroup, setActiveGroup] = useState<string>(currentUserGroup || '37В');
-
-  useEffect(() => {
-    if (currentUserGroup) {
-      setActiveGroup(currentUserGroup);
-    }
-  }, [currentUserGroup]);
-
-  // Load registered students for this group (automatically populated when students register)
+  // Load registered students for active group
   const [students, setStudents] = useState<StudentGradeRecord[]>(() => {
-    return getRegisteredStudentsForGroup(currentUserGroup || '37В');
+    return getRegisteredStudentsForGroup(activeGroup);
   });
 
   const [searchFilter, setSearchFilter] = useState('');
   const [isLiveFromDb, setIsLiveFromDb] = useState<boolean>(false);
 
-  // Selected student for deep detailed inspection & grading modal
+  // Selected student for deep detailed inspection modal
   const [selectedStudent, setSelectedStudent] = useState<StudentGradeRecord | null>(null);
-  // Subject selected inside the student details modal
   const [modalSubjectId, setModalSubjectId] = useState<string>(subject.id);
+
   // Reset confirmation state
   const [selectedStudentForReset, setSelectedStudentForReset] = useState<{ 
     student: StudentGradeRecord; 
     topicCode: string; 
     workId: string; 
     subjectId: string 
+  } | null>(null);
+
+  // Practical review modal state
+  const [activeReviewSubmission, setActiveReviewSubmission] = useState<PracticalSubmission | null>(null);
+  const [reviewGradeInput, setReviewGradeInput] = useState<number>(9);
+  const [reviewFeedbackInput, setReviewFeedbackInput] = useState<string>('');
+  const [syncGradeToJournalDate, setSyncGradeToJournalDate] = useState<boolean>(true);
+
+  // Submissions list for active group & subject
+  const [submissionsVersion, setSubmissionsVersion] = useState<number>(0);
+  const groupSubmissions = useMemo(() => {
+    return getGroupPracticalSubmissions(activeGroup, activeSubject.id);
+  }, [activeGroup, activeSubject.id, submissionsVersion]);
+
+  const pendingSubmissionsCount = useMemo(() => {
+    return groupSubmissions.filter(s => s.status === 'submitted').length;
+  }, [groupSubmissions]);
+
+  // Popover state for quick cell grading in calendar journal
+  const [activeGradePopover, setActiveGradePopover] = useState<{
+    studentId: string;
+    studentName: string;
+    dateStr: string; // YYYY-MM-DD
+    currentVal: number | string | null;
   } | null>(null);
 
   // Reload students when group changes
@@ -118,12 +161,35 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   }, [activeGroup, activeSubject.id]);
 
+  // Calendar days of the selected academic month
+  const monthDays = useMemo(() => {
+    const days = [];
+    const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    for (let day = 1; day <= currentAcademicMonth.daysInMonth; day++) {
+      const d = new Date(currentAcademicMonth.year, currentAcademicMonth.monthIndex, day);
+      const dayOfWeek = d.getDay(); // 0 = Sun, 6 = Sat
+      const dayStr = day.toString().padStart(2, '0');
+      const monthNumStr = (currentAcademicMonth.monthIndex + 1).toString().padStart(2, '0');
+      const fullDateStr = `${currentAcademicMonth.year}-${monthNumStr}-${dayStr}`;
+
+      days.push({
+        dayNumber: day,
+        dayOfWeek: dayNames[dayOfWeek],
+        isWeekend: dayOfWeek === 0, // Sunday
+        fullDateStr,
+        isToday: fullDateStr === todayStr
+      });
+    }
+    return days;
+  }, [currentAcademicMonth]);
+
   // Helper: get student grades map for any subject
   const getStudentGradesForSubject = (student: StudentGradeRecord, subjId: string): Record<string, number | null> => {
     if (student.subjectGrades && student.subjectGrades[subjId]) {
       return student.subjectGrades[subjId];
     }
-    // Backward compatibility: secbasics uses student.topicGrades
     if (subjId === 'secbasics' && student.topicGrades) {
       return student.topicGrades;
     }
@@ -138,7 +204,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return Math.round((sum / validScores.length) * 10) / 10;
   };
 
-  // Helper: get student average for a subject (cached or computed)
+  // Helper: calculate average score for a student in selected month
+  const calculateMonthAverage = (student: StudentGradeRecord, subjId: string): number => {
+    const dateGrades = getStudentDateGrades(student, subjId);
+    const monthScores: number[] = [];
+
+    monthDays.forEach(d => {
+      const val = dateGrades[d.fullDateStr];
+      if (typeof val === 'number' && val > 0) {
+        monthScores.push(val);
+      }
+    });
+
+    if (monthScores.length === 0) return 0;
+    const sum = monthScores.reduce((a, b) => a + b, 0);
+    return Math.round((sum / monthScores.length) * 10) / 10;
+  };
+
+  // Helper: get student average for a subject
   const getSubjectAverage = (student: StudentGradeRecord, subjId: string): number => {
     if (student.subjectAverages && typeof student.subjectAverages[subjId] === 'number') {
       return student.subjectAverages[subjId];
@@ -183,12 +266,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           [subjId]: currentSubjectGrades
         };
 
-        // If secbasics, keep topicGrades synced
         const updatedTopicGrades = subjId === 'secbasics'
           ? { ...st.topicGrades, [workId]: score }
           : st.topicGrades;
 
-        // Recalculate overall average across non-zero subjects
         const validAvgs = Object.values(updatedSubjectAverages).filter(v => v > 0);
         const newOverallAvg = validAvgs.length > 0
           ? Math.round((validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length) * 10) / 10
@@ -209,9 +290,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         return updatedStudent;
       });
 
-      saveGroupStudents(currentUserGroup, updatedStudents);
+      saveGroupStudents(activeGroup, updatedStudents);
       return updatedStudents;
     });
+  };
+
+  // Set or update a student's calendar date grade
+  const handleSetDateGrade = (studentId: string, dateStr: string, grade: number | string | null) => {
+    updateStudentDateGrade(studentId, activeGroup, activeSubject.id, dateStr, grade);
+    setStudents(getRegisteredStudentsForGroup(activeGroup));
+    setActiveGradePopover(null);
   };
 
   // Save teacher note for student & subject
@@ -226,7 +314,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         }
         return updatedStudent;
       });
-      saveGroupStudents(currentUserGroup, updated);
+      saveGroupStudents(activeGroup, updated);
       return updated;
     });
   };
@@ -239,18 +327,38 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setSelectedStudentForReset(null);
   };
 
-  // Key topics to display in table matrix columns for the active subject
-  const trackedTopicsForActiveSubject = useMemo(() => {
-    if (!activeSubject.topics || activeSubject.topics.length === 0) return [];
-    return activeSubject.topics.slice(0, 8).map(t => ({
-      id: t.id,
-      code: t.code,
-      title: t.title,
-      isExam: t.isExam
-    }));
-  }, [activeSubject]);
+  // Grade practical submission modal submit
+  const handleApprovePracticalReview = (grade: number, feedback: string) => {
+    if (!activeReviewSubmission) return;
+    const graded = gradePracticalSubmission(
+      activeReviewSubmission.id,
+      grade,
+      feedback,
+      activeSubject.teacher || 'Селедцов Александр Игоревич'
+    );
 
-  // Summary statistics for the active subject
+    if (graded && syncGradeToJournalDate) {
+      // Sync grade into journal on the submission date
+      const subDate = activeReviewSubmission.submittedAt.split('T')[0];
+      handleSetDateGrade(activeReviewSubmission.studentId, subDate, grade);
+    }
+
+    setSubmissionsVersion(v => v + 1);
+    setActiveReviewSubmission(null);
+  };
+
+  const handleReturnPracticalReview = (feedback: string) => {
+    if (!activeReviewSubmission) return;
+    requestRevisionPracticalSubmission(
+      activeReviewSubmission.id,
+      feedback,
+      activeSubject.teacher || 'Селедцов Александр Игоревич'
+    );
+    setSubmissionsVersion(v => v + 1);
+    setActiveReviewSubmission(null);
+  };
+
+  // Filter students
   const totalStudents = students.length;
   const filteredStudents = students.filter(s => 
     s.studentName.toLowerCase().includes(searchFilter.toLowerCase())
@@ -271,11 +379,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }).length;
   }, [students, activeSubject.id]);
 
-  const getScoreBadgeClass = (score: number | null | undefined) => {
-    if (score === null || score === undefined) return 'bg-gray-100 text-gray-400 dark:bg-gray-800/60 dark:text-gray-500';
-    if (score >= 9) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold';
-    if (score >= 6) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold';
-    if (score >= 4) return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-semibold';
+  const getScoreBadgeClass = (score: number | string | null | undefined) => {
+    if (score === null || score === undefined || score === '') return 'text-gray-300 dark:text-gray-700';
+    if (score === 'н') return 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-bold';
+    if (score === 'уп') return 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-bold';
+    const num = Number(score);
+    if (num >= 9) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold';
+    if (num >= 6) return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold';
+    if (num >= 4) return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-semibold';
     return 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-bold';
   };
 
@@ -295,8 +406,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">
-                Журнал успеваемости преподавателя
+                Журнал группы {activeGroup}
               </h1>
+              {/* Group Selector */}
               <div className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-xl border border-indigo-200 dark:border-indigo-900/60">
                 <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">Группа:</span>
                 <select
@@ -337,7 +449,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           )}
 
           <button
-            onClick={() => alert(`Ведомость группы ${currentUserGroup} по предмету "${activeSubject.title}" успешно сформирована в формате Excel/CSV!`)}
+            onClick={() => alert(`Ведомость группы ${activeGroup} по предмету "${activeSubject.title}" успешно сформирована в формате Excel/CSV!`)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1A1E24] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-xs"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
@@ -346,12 +458,59 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
       </div>
 
+      {/* Main Subtabs Navigation */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-gray-100 dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 text-xs font-semibold">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('calendar_journal')}
+          className={`py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'calendar_journal'
+              ? 'bg-white dark:bg-[#20252F] text-indigo-600 dark:text-indigo-400 shadow-sm font-bold'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Журнал по датам (01.09 — 30.06)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('test_results')}
+          className={`py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'test_results'
+              ? 'bg-white dark:bg-[#20252F] text-indigo-600 dark:text-indigo-400 shadow-sm font-bold'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          <span>Оценки за тесты</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('practical_reviews')}
+          className={`py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer relative ${
+            activeSubTab === 'practical_reviews'
+              ? 'bg-white dark:bg-[#20252F] text-indigo-600 dark:text-indigo-400 shadow-sm font-bold'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span>Проверка практических и лабораторных</span>
+          {pendingSubmissionsCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">
+              {pendingSubmissionsCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Subject Filter Bar */}
       <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF] flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-indigo-500" />
-            Выберите предмет для отображения в журнале:
+            Выберите предмет для отображения:
           </span>
           <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hidden sm:inline">
             Всего 8 дисциплин колледжа
@@ -366,7 +525,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <button
                 key={s.id}
                 onClick={() => setActiveSubjectId(s.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-gray-100 dark:bg-[#1A1E24] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
@@ -384,357 +543,756 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards for the Teacher */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-2">
-          <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
-            Студентов в группе {currentUserGroup}
-          </span>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
-            {totalStudents} <span className="text-sm font-normal text-gray-400">человек</span>
-          </div>
-          <span className="text-[11px] text-emerald-600 font-medium block">
-            100% зарегистрированы в системе
-          </span>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-2">
-          <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
-            Средний балл по «{getSubjectFriendlyName(activeSubject)}»
-          </span>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
-            {activeSubjectAvgGroup} <span className="text-sm font-normal text-gray-400">/ 10</span>
-          </div>
-          <span className="text-[11px] text-[#2563EB] font-medium block">
-            Успеваемость по дисциплине
-          </span>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-2">
-          <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
-            Задолженности по предмету
-          </span>
-          <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400">
-            {activeSubjectDebtors} <span className="text-sm font-normal text-gray-400">студент(ов)</span>
-          </div>
-          <span className="text-[11px] text-gray-400 font-medium block">
-            Балл ниже 4 или пропущенные тесты
-          </span>
-        </div>
-      </div>
-
-      {/* Gradebook Matrix Table Card */}
-      <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] shadow-sm overflow-hidden space-y-4 p-5">
-        {/* Table Top Controls */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
-              Ведомость оценок: {activeSubject.title}
-            </h3>
-            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-              (нажмите на строку студента для индивидуальной карточки)
-            </span>
-          </div>
-
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-            <input
-              type="text"
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="Поиск по фамилии..."
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Matrix Table or Empty States */}
-        {students.length === 0 ? (
-          <div className="py-16 px-6 text-center space-y-4 flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-xs">
-              <Users className="w-8 h-8" />
-            </div>
-            <div className="max-w-md space-y-1.5">
-              <h4 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
-                В группе {currentUserGroup} пока нет зарегистрированных учащихся
-              </h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                Студенты появятся в электронном журнале автоматически, как только зарегистрируются в системе и выберут группу <strong>{currentUserGroup}</strong>.
-              </p>
-            </div>
-            <div className="px-4 py-2.5 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-[11px] text-gray-600 dark:text-gray-400">
-              💡 <strong>Автоматическое добавление:</strong> при создании профиля учащийся указывает группу «{currentUserGroup}», и его ведомость сразу отображается здесь.
-            </div>
-          </div>
-        ) : filteredStudents.length === 0 ? (
-          <div className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">
-            Студенты по запросу «{searchFilter}» не найдены
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-800 text-[#6B7280] dark:text-[#9CA3AF] bg-gray-50/50 dark:bg-[#181B21]">
-                  <th className="py-3 px-4 font-semibold">Студент</th>
-                  {trackedTopicsForActiveSubject.map(t => (
-                    <th key={t.id} className="py-3 px-2 text-center font-semibold" title={t.title}>
-                      <div className="flex flex-col items-center">
-                        <span>{t.code}</span>
-                        {t.isExam && (
-                          <span className="text-[9px] text-rose-500 font-bold uppercase">ОКР</span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="py-3 px-3 text-center font-semibold">Ср. по предм.</th>
-                  <th className="py-3 px-3 text-center font-semibold">Общий GPA</th>
-                  <th className="py-3 px-4 text-right font-semibold">Действие</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80">
-                {filteredStudents.map(student => {
-                  const subjectGrades = getStudentGradesForSubject(student, activeSubject.id);
-                  const subjAvg = getSubjectAverage(student, activeSubject.id);
-                  const overallGpa = getOverallGPA(student);
-
-                  return (
-                    <tr 
-                      key={student.studentId} 
-                      className="hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition-colors group cursor-pointer"
-                      onClick={() => {
-                        setSelectedStudent(student);
-                        setModalSubjectId(activeSubject.id);
-                      }}
-                    >
-                      <td className="py-3 px-4 font-medium text-[#111827] dark:text-[#F3F3EF] whitespace-nowrap">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center justify-center shrink-0">
-                            {student.studentName.slice(0, 1)}
-                          </div>
-                          <span className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors font-semibold">
-                            {student.studentName}
-                          </span>
-                        </div>
-                      </td>
-
-                      {trackedTopicsForActiveSubject.map(t => {
-                        const score = subjectGrades[t.id];
-                        return (
-                          <td key={t.id} className="py-2 px-2 text-center whitespace-nowrap">
-                            <span
-                              className={`inline-block min-w-7 py-1 px-1.5 rounded-lg text-xs font-mono ${getScoreBadgeClass(score)}`}
-                            >
-                              {score !== null && score !== undefined ? score : '—'}
-                            </span>
-                          </td>
-                        );
-                      })}
-
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <span className={`font-bold font-mono text-xs px-2.5 py-1 rounded-md ${
-                          subjAvg >= 9
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : subjAvg >= 6
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                            : subjAvg >= 4
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                        }`}>
-                          {subjAvg > 0 ? subjAvg : '—'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <span className="font-bold font-mono text-xs px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-[#111827] dark:text-[#F3F3EF]">
-                          {overallGpa > 0 ? overallGpa : '—'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => {
-                            setSelectedStudent(student);
-                            setModalSubjectId(activeSubject.id);
-                          }}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-xl transition-colors shadow-xs"
-                        >
-                          <span>Оценки</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* STUDENT DETAIL MODAL & GRADE SETTER (The requested feature) */}
-      {selectedStudent && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setSelectedStudent(null)}
-        >
-          <div 
-            className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21]">
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white font-extrabold flex items-center justify-center text-lg shadow-sm">
-                  {selectedStudent.studentName.slice(0, 1)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-bold text-[#111827] dark:text-[#F3F3EF]">
-                      {selectedStudent.studentName}
-                    </h2>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                      Группа {currentUserGroup}
-                    </span>
-                  </div>
-                  <span className="text-xs text-[#6B7280] dark:text-[#8E95A2]">
-                    Индивидуальная карточка успеваемости и выставление оценок
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex flex-col items-end">
-                  <span className="text-[11px] text-gray-500 uppercase font-semibold">Общий рейтинг (GPA)</span>
-                  <span className="text-sm font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
-                    {getOverallGPA(selectedStudent)} / 10
-                  </span>
-                </div>
-                <button
-                  onClick={() => setSelectedStudent(null)}
-                  className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+      {/* =====================================================================
+          SUBTAB 1: КАЛЕНДАРНЫЙ ЖУРНАЛ ПО ДАТАМ (01.09 — 30.06)
+          ===================================================================== */}
+      {activeSubTab === 'calendar_journal' && (
+        <div className="space-y-4">
+          {/* Academic Months Ribbon (01.09 - 30.06) */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-500" />
+                Учебный календарь: выбор месяца обучения
+              </span>
+              <span className="text-[11px] text-gray-400">
+                Учебный год 2026/2027 • 01.09 — 30.06
+              </span>
             </div>
 
-            {/* Subject Selector Tabs inside Modal */}
-            <div className="px-6 pt-3 pb-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#15181E] flex items-center gap-2 overflow-x-auto no-scrollbar">
-              {subjectsList.map((s) => {
-                const isSelected = s.id === modalSubjectId;
-                const subjAvg = getSubjectAverage(selectedStudent, s.id);
-                const friendlyName = getSubjectFriendlyName(s);
+            {/* Months Tabs */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5">
+              {ACADEMIC_MONTHS.map(m => {
+                const isSelected = m.id === selectedMonthId;
                 return (
                   <button
-                    key={s.id}
-                    onClick={() => setModalSubjectId(s.id)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all ${
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelectedMonthId(m.id)}
+                    className={`p-2 rounded-xl text-center border transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-gray-100 dark:bg-[#1A1E24] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs font-bold'
+                        : 'bg-gray-50 dark:bg-[#181B21] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:border-indigo-300'
                     }`}
                   >
-                    <span>{friendlyName}</span>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md ${
-                      isSelected ? 'bg-indigo-700 text-indigo-100' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                    }`}>
-                      {subjAvg > 0 ? `${subjAvg}` : '—'}
+                    <span className="text-xs block leading-tight">{m.name}</span>
+                    <span className={`text-[10px] block mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-gray-400'}`}>
+                      {m.semester}-й семестр
                     </span>
                   </button>
                 );
               })}
             </div>
+          </div>
 
-            {/* Modal Body Content (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Active Subject KPI & Overview */}
-              <div className="p-5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                    Выбранная дисциплина
+          {/* Matrix Table */}
+          <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] shadow-sm overflow-hidden p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                  Журнал: {currentAcademicMonth.name} {currentAcademicMonth.year} • {activeSubject.title}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Нажмите на любую ячейку даты, чтобы выставить оценку (1–10) или отметку посещаемости («н», «уп»)
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Поиск по фамилии..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {filteredStudents.length === 0 ? (
+              <div className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">
+                Студенты не найдены
+              </div>
+            ) : (
+              <div className="overflow-x-auto relative">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-800 text-[#6B7280] dark:text-[#9CA3AF] bg-gray-50/50 dark:bg-[#181B21]">
+                      <th className="py-3 px-3 font-semibold sticky left-0 bg-gray-50 dark:bg-[#181B21] z-10 w-48 shadow-xs">
+                        Студент
+                      </th>
+
+                      {monthDays.map(d => (
+                        <th
+                          key={d.fullDateStr}
+                          className={`py-2 px-1 text-center font-semibold min-w-8 ${
+                            d.isToday 
+                              ? 'bg-blue-100/60 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' 
+                              : d.isWeekend 
+                              ? 'bg-gray-100/40 dark:bg-gray-800/20 text-gray-400' 
+                              : ''
+                          }`}
+                        >
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] text-gray-400 font-normal">{d.dayOfWeek}</span>
+                            <span className="font-bold text-xs">{d.dayNumber}</span>
+                          </div>
+                        </th>
+                      ))}
+
+                      <th className="py-3 px-3 text-center font-bold whitespace-nowrap bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-300">
+                        Ср. (мес)
+                      </th>
+                      <th className="py-3 px-3 text-center font-bold whitespace-nowrap bg-gray-50 dark:bg-[#181B21]">
+                        Итог
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80">
+                    {filteredStudents.map((student, sIdx) => {
+                      const dateGrades = getStudentDateGrades(student, activeSubject.id);
+                      const monthAvg = calculateMonthAverage(student, activeSubject.id);
+                      const subjAvg = getSubjectAverage(student, activeSubject.id);
+
+                      return (
+                        <tr key={student.studentId} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-colors">
+                          <td className="py-2.5 px-3 font-medium text-[#111827] dark:text-[#F3F3EF] whitespace-nowrap sticky left-0 bg-white dark:bg-[#15181E] z-10 shadow-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400 text-[11px] w-4">{sIdx + 1}.</span>
+                              <button
+                                onClick={() => {
+                                  setSelectedStudent(student);
+                                  setModalSubjectId(activeSubject.id);
+                                }}
+                                className="font-semibold text-left hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer truncate max-w-[170px]"
+                              >
+                                {student.studentName}
+                              </button>
+                            </div>
+                          </td>
+
+                          {monthDays.map(d => {
+                            const val = dateGrades[d.fullDateStr];
+                            const isTestScore = Boolean(
+                              student.testAttempts?.[activeSubject.id]?.some(a => a.date === d.fullDateStr)
+                            );
+
+                            return (
+                              <td 
+                                key={d.fullDateStr} 
+                                onClick={() => setActiveGradePopover({
+                                  studentId: student.studentId,
+                                  studentName: student.studentName,
+                                  dateStr: d.fullDateStr,
+                                  currentVal: val ?? null
+                                })}
+                                className={`py-1.5 px-0.5 text-center cursor-pointer hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-all ${
+                                  d.isToday ? 'bg-blue-50/30 dark:bg-blue-950/20' : ''
+                                }`}
+                              >
+                                <div className="relative inline-flex items-center justify-center">
+                                  <span
+                                    className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-mono select-none ${getScoreBadgeClass(val)}`}
+                                  >
+                                    {val !== null && val !== undefined && val !== '' ? val : '·'}
+                                  </span>
+                                  {isTestScore && (
+                                    <span 
+                                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500 ring-1 ring-white dark:ring-gray-900" 
+                                      title="Оценка за тест"
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+
+                          <td className="py-2 px-2 text-center whitespace-nowrap bg-indigo-50/20 dark:bg-indigo-950/10">
+                            <span className={`font-bold font-mono text-xs px-2 py-0.5 rounded-md ${
+                              monthAvg >= 9 ? 'text-emerald-600' : monthAvg >= 6 ? 'text-blue-600' : monthAvg >= 4 ? 'text-amber-600' : 'text-gray-400'
+                            }`}>
+                              {monthAvg > 0 ? monthAvg : '—'}
+                            </span>
+                          </td>
+
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
+                            <span className="font-bold font-mono text-xs px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                              {subjAvg > 0 ? subjAvg : '—'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          SUBTAB 2: РЕЗУЛЬТАТЫ ТЕСТОВ
+          ===================================================================== */}
+      {activeSubTab === 'test_results' && (
+        <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] shadow-sm p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                Результаты тестирования: {activeSubject.title}
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Автоматически зафиксированные попытки прохождения тестов и контрольных срезов учащимися группы {activeGroup}
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Поиск по фамилии..."
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-800 text-[#6B7280] dark:text-[#9CA3AF] bg-gray-50/50 dark:bg-[#181B21]">
+                  <th className="py-3 px-4 font-semibold">Студент</th>
+                  <th className="py-3 px-3 font-semibold">Тема / Тест</th>
+                  <th className="py-3 px-3 text-center font-semibold">Балл (1–10)</th>
+                  <th className="py-3 px-3 text-center font-semibold">Дата сдачи</th>
+                  <th className="py-3 px-3 text-center font-semibold">Правильных ответов</th>
+                  <th className="py-3 px-4 text-right font-semibold">Действие</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80">
+                {filteredStudents.flatMap(student => {
+                  const attempts = student.testAttempts?.[activeSubject.id] || [];
+                  const subjectGrades = getStudentGradesForSubject(student, activeSubject.id);
+
+                  // If student has explicit attempts:
+                  if (attempts.length > 0) {
+                    return attempts.map((att, attIdx) => (
+                      <tr key={`${student.studentId}-${att.topicId}-${attIdx}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                        <td className="py-3 px-4 font-medium text-[#111827] dark:text-[#F3F3EF]">
+                          {student.studentName}
+                        </td>
+                        <td className="py-3 px-3 text-gray-700 dark:text-gray-300">
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1.5">{att.topicCode}</span>
+                          <span>{att.topicTitle || 'Тестирование по теме'}</span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`inline-block py-1 px-2.5 rounded-lg text-xs font-mono font-bold ${getScoreBadgeClass(att.score)}`}>
+                            {att.score} из 10
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center text-gray-500">
+                          {att.date || new Date(att.completedAt).toLocaleDateString('ru-RU')}
+                        </td>
+                        <td className="py-3 px-3 text-center text-gray-600 dark:text-gray-300 font-mono">
+                          {att.correctCount !== undefined && att.totalQuestions 
+                            ? `${att.correctCount} / ${att.totalQuestions} (${Math.round((att.correctCount / att.totalQuestions) * 100)}%)` 
+                            : 'Сдано'}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentForReset({
+                              student,
+                              topicCode: att.topicCode || att.topicId,
+                              workId: att.topicId,
+                              subjectId: activeSubject.id
+                            })}
+                            className="px-2.5 py-1 rounded-lg text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          >
+                            Сбросить попытку
+                          </button>
+                        </td>
+                      </tr>
+                    ));
+                  }
+
+                  // Fallback to topic grades matrix if no detailed attempt objects yet
+                  const topicsWithGrades = Object.entries(subjectGrades).filter(([_, score]) => score !== null);
+                  return topicsWithGrades.map(([topicId, score]) => {
+                    const topicObj = activeSubject.topics?.find(t => t.id === topicId);
+                    return (
+                      <tr key={`${student.studentId}-${topicId}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                        <td className="py-3 px-4 font-medium text-[#111827] dark:text-[#F3F3EF]">
+                          {student.studentName}
+                        </td>
+                        <td className="py-3 px-3 text-gray-700 dark:text-gray-300">
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1.5">{topicObj?.code || 'Тест'}</span>
+                          <span>{topicObj?.title || 'Тестирование'}</span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={`inline-block py-1 px-2.5 rounded-lg text-xs font-mono font-bold ${getScoreBadgeClass(score)}`}>
+                            {score} из 10
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center text-gray-500">
+                          {new Date().toLocaleDateString('ru-RU')}
+                        </td>
+                        <td className="py-3 px-3 text-center text-gray-500">
+                          Сдано
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentForReset({
+                              student,
+                              topicCode: topicObj?.code || topicId,
+                              workId: topicId,
+                              subjectId: activeSubject.id
+                            })}
+                            className="px-2.5 py-1 rounded-lg text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          >
+                            Сбросить попытку
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          SUBTAB 3: ПРОВЕРКА ПРАКТИЧЕСКИХ И ЛАБОРАТОРНЫХ
+          ===================================================================== */}
+      {activeSubTab === 'practical_reviews' && (
+        <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] shadow-sm p-6 space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                  Проверка практических и лабораторных работ
+                </h3>
+                {pendingSubmissionsCount > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    {pendingSubmissionsCount} ожидают проверки
                   </span>
-                  <h3 className="text-base sm:text-lg font-bold text-[#111827] dark:text-[#F3F3EF] mt-0.5">
-                    {modalSubject.title}
-                  </h3>
-                  <span className="text-xs text-gray-600 dark:text-gray-400 mt-1 block">
-                    Преподаватель: <strong className="text-gray-800 dark:text-gray-200">{modalSubject.teacher}</strong> • Всего тем: {modalSubject.topics?.length || 0}
-                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {activeSubject.title} • Проверка отчётов, оформленных студентами во встроенном текстовом редакторе
+              </p>
+            </div>
+          </div>
+
+          {groupSubmissions.length === 0 ? (
+            <div className="py-16 text-center space-y-3 flex flex-col items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <FileText className="w-7 h-7" />
+              </div>
+              <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF]">
+                Сданных работ по предмету «{getSubjectFriendlyName(activeSubject)}» пока нет
+              </h4>
+              <p className="text-xs text-gray-500 max-w-sm">
+                Как только учащийся нажмёт «Отправить на проверку» в редакторе отчёта, его работа сразу появится здесь.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {groupSubmissions.map(sub => (
+                <div
+                  key={sub.id}
+                  className="p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#181B21] shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 dark:hover:border-indigo-800 transition-colors"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                        Работа № {sub.workNumber}
+                      </span>
+                      {sub.status === 'submitted' && (
+                        <span className="text-xs font-bold text-amber-600 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Ожидает проверки
+                        </span>
+                      )}
+                      {sub.status === 'graded' && (
+                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Проверено • {sub.grade}/10
+                        </span>
+                      )}
+                      {sub.status === 'needs_revision' && (
+                        <span className="text-xs font-bold text-rose-600 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          На доработке
+                        </span>
+                      )}
+                    </div>
+
+                    <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF] leading-snug">
+                      {sub.workTitle}
+                    </h4>
+
+                    <div className="text-xs text-gray-500 space-y-0.5">
+                      <p><strong>Студент:</strong> {sub.studentName} (Группа {sub.group})</p>
+                      <p><strong>Отправлено:</strong> {new Date(sub.submittedAt).toLocaleString('ru-RU')}</p>
+                    </div>
+
+                    {sub.teacherFeedback && (
+                      <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-xs italic text-gray-600 dark:text-gray-400">
+                        Замечания: «{sub.teacherFeedback}»
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                    <span className="text-xs text-gray-400">
+                      Обновлено: {new Date(sub.updatedAt).toLocaleTimeString()}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveReviewSubmission(sub);
+                        setReviewGradeInput(sub.grade || 9);
+                        setReviewFeedbackInput(sub.teacherFeedback || '');
+                      }}
+                      className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>{sub.status === 'graded' ? 'Посмотреть отчёт' : 'Проверить работу'}</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =====================================================================
+          POPOVER: БЫСТРОЕ ВЫСТАВЛЕНИЕ ОЦЕНКИ В КАЛЕНДАРНОМ ЖУРНАЛЕ
+          ===================================================================== */}
+      {activeGradePopover && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setActiveGradePopover(null)}
+        >
+          <div 
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#161920] border border-gray-200 dark:border-gray-800 p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF]">
+                  Выставить оценку в журнал
+                </h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {activeGradePopover.studentName} • Дата: {activeGradePopover.dateStr}
+                </p>
+              </div>
+              <button 
+                onClick={() => setActiveGradePopover(null)} 
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick 10-point Scale Buttons */}
+            <div>
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                Балл за пару (1 — 10):
+              </span>
+              <div className="grid grid-cols-5 gap-2">
+                {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => handleSetDateGrade(activeGradePopover.studentId, activeGradePopover.dateStr, n)}
+                    className={`py-2 rounded-xl text-xs font-bold font-mono transition-transform hover:scale-105 cursor-pointer ${
+                      n >= 9 
+                        ? 'bg-emerald-600 text-white shadow-xs' 
+                        : n >= 6 
+                        ? 'bg-blue-600 text-white shadow-xs' 
+                        : n >= 4 
+                        ? 'bg-amber-500 text-white shadow-xs' 
+                        : 'bg-rose-600 text-white shadow-xs'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Attendance Marks */}
+            <div>
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                Отметка посещаемости:
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSetDateGrade(activeGradePopover.studentId, activeGradePopover.dateStr, 'н')}
+                  className="py-2 px-3 rounded-xl border border-rose-300 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  н (пропуск занятия)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetDateGrade(activeGradePopover.studentId, activeGradePopover.dateStr, 'уп')}
+                  className="py-2 px-3 rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  уп (уважительная)
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleSetDateGrade(activeGradePopover.studentId, activeGradePopover.dateStr, null)}
+                className="text-xs text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+              >
+                Очистить оценку
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveGradePopover(null)}
+                className="px-4 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL: ПРОВЕРКА РАБОТЫ ПРЕПОДАВАТЕЛЕМ (ОТЧЁТ ВОРД)
+          ===================================================================== */}
+      {activeReviewSubmission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-5xl h-[92vh] rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-3.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21] flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                  Проверка: Практическая работа № {activeReviewSubmission.workNumber}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {activeReviewSubmission.subjectTitle} • Учащийся: <strong>{activeReviewSubmission.studentName}</strong> (Группа {activeReviewSubmission.group})
+                </p>
+              </div>
+
+              <button
+                onClick={() => setActiveReviewSubmission(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Split Content: Left Document View, Right Grading Panel */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              {/* Left Document View */}
+              <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-[#F1F3F5] dark:bg-[#0D0F14] flex justify-center">
+                <div 
+                  className="w-full max-w-[800px] bg-white dark:bg-[#1A1D24] border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-8 sm:p-12 text-gray-900 dark:text-gray-100 leading-relaxed font-serif"
+                  style={{
+                    fontFamily: "'Times New Roman', serif",
+                    fontSize: '14pt',
+                    lineHeight: '1.6'
+                  }}
+                  dangerouslySetInnerHTML={{ __html: activeReviewSubmission.contentHtml }}
+                />
+              </div>
+
+              {/* Right Grading & Feedback Panel */}
+              <aside className="w-full md:w-80 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#15181E] p-5 flex flex-col justify-between shrink-0 overflow-y-auto space-y-4">
+                <div className="space-y-4">
+                  <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF] flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    Оценка и рецензия
+                  </h4>
+
+                  {/* Score Buttons */}
+                  <div>
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-2">
+                      Оценка за работу (1–10):
+                    </span>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(n => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setReviewGradeInput(n)}
+                          className={`py-2 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
+                            reviewGradeInput === n
+                              ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400 scale-105'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Feedback text */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1.5">
+                      Комментарий / Замечания преподавателя:
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={reviewFeedbackInput}
+                      onChange={(e) => setReviewFeedbackInput(e.target.value)}
+                      placeholder="Например: Работа выполнена в полном объёме, выводы сделаны корректно..."
+                      className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21] text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Sync to journal date checkbox */}
+                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={syncGradeToJournalDate}
+                      onChange={(e) => setSyncGradeToJournalDate(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    <span>Занести оценку в журнал на дату сдачи ({activeReviewSubmission.submittedAt.split('T')[0]})</span>
+                  </label>
                 </div>
 
-                <div className="flex items-center gap-4 bg-white dark:bg-[#181B21] p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900 shrink-0">
-                  <div className="flex flex-col text-right">
-                    <span className="text-xs text-gray-500 font-medium">Средний балл по предмету</span>
-                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
-                      {getSubjectAverage(selectedStudent, modalSubject.id) || '0.0'}
-                      <span className="text-sm font-normal text-gray-400"> / 10</span>
-                    </span>
-                  </div>
-                  <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                    <Award className="w-6 h-6" />
-                  </div>
+                {/* Actions */}
+                <div className="space-y-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => handleApprovePracticalReview(reviewGradeInput, reviewFeedbackInput)}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Утвердить оценку ({reviewGradeInput}/10)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleReturnPracticalReview(reviewFeedbackInput || 'Требуется доработка')}
+                    className="w-full py-2 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs font-semibold hover:bg-rose-100 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Вернуть на доработку</span>
+                  </button>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL: ИНДИВИДУАЛЬНАЯ КАРТОЧКА СТУДЕНТА
+          ===================================================================== */}
+      {selectedStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div 
+            className="w-full max-w-4xl max-h-[92vh] rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-[#181B21]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                  {selectedStudent.studentName.slice(0, 1)}
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-[#111827] dark:text-[#F3F3EF]">
+                    {selectedStudent.studentName}
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    Учащийся группы {selectedStudent.group} • Общий GPA: <strong>{getOverallGPA(selectedStudent)}</strong>
+                  </span>
                 </div>
               </div>
 
-              {/* Assessment items list with interactive 1-10 grade setters */}
+              <button
+                onClick={() => setSelectedStudent(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Disciplines Selector */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider block">
+                  Выберите предмет для выставления оценок:
+                </span>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                  {subjectsList.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setModalSubjectId(s.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all ${
+                        modalSubjectId === s.id
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                      }`}
+                    >
+                      {getSubjectFriendlyName(s)}: <strong>{getSubjectAverage(selectedStudent, s.id) || '—'}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Topics Grading Matrix */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF] flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-indigo-500" />
-                    <span>Контрольные мероприятия, тесты и практические работы</span>
-                  </h4>
-                  <span className="text-xs text-gray-500">
-                    Нажмите на оценку от 1 до 10 для мгновенного сохранения
+                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Темы и срезы знаний: {modalSubject.title}
+                  </span>
+                  <span className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                    Средний балл по предмету: {getSubjectAverage(selectedStudent, modalSubject.id) || '—'}
                   </span>
                 </div>
 
-                <div className="space-y-3">
-                  {/* Topics & Tests */}
-                  {modalSubject.topics && modalSubject.topics.map((topic: Topic) => {
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+                  {modalSubject.topics && modalSubject.topics.map((t: Topic) => {
                     const studentGrades = getStudentGradesForSubject(selectedStudent, modalSubject.id);
-                    const currentScore = studentGrades[topic.id];
+                    const currentScore = studentGrades[t.id];
 
                     return (
-                      <div 
-                        key={topic.id}
-                        className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#181B21] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      <div
+                        key={t.id}
+                        className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-[#181B21] flex items-center justify-between gap-2"
                       >
-                        {/* Work description */}
-                        <div className="flex items-start gap-3">
-                          <span className={`text-xs font-bold px-2 py-1 rounded-md shrink-0 ${
-                            topic.isExam
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                              : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                          }`}>
-                            {topic.code}
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h5 className="text-sm font-semibold text-[#111827] dark:text-[#F3F3EF]">
-                                {topic.title}
-                              </h5>
-                              {topic.isExam && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-white uppercase">
-                                  ОКР
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-xs text-[#6B7280] dark:text-[#8E95A2]">
-                              {topic.test ? `Тест (${topic.test.questions.length} вопр., ${topic.test.durationMinutes} мин)` : 'Устный опрос / защита темы'}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{t.code}</span>
+                            <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate block">
+                              {t.title}
                             </span>
                           </div>
                         </div>
 
-                        {/* Interactive Grade Picker (1-10) */}
-                        <div className="flex items-center gap-1.5 flex-wrap self-end md:self-center">
-                          <span className="text-xs font-semibold text-gray-500 mr-1 hidden lg:inline">
-                            Оценка:
-                          </span>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((scoreVal) => {
+                        {/* Grading buttons 1-10 */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {[10, 8, 6, 4].map(scoreVal => {
                             const isSelectedScore = currentScore === scoreVal;
                             return (
                               <button
                                 key={scoreVal}
-                                onClick={() => handleSetGrade(selectedStudent.studentId, modalSubject.id, topic.id, scoreVal)}
+                                onClick={() => handleSetGrade(selectedStudent.studentId, modalSubject.id, t.id, scoreVal)}
                                 className={`w-7 h-7 rounded-lg text-xs font-bold font-mono transition-all ${
                                   isSelectedScore
                                     ? 'bg-indigo-600 text-white shadow-md scale-110 ring-2 ring-indigo-400'
@@ -748,69 +1306,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                           {currentScore !== null && currentScore !== undefined && (
                             <button
-                              onClick={() => handleSetGrade(selectedStudent.studentId, modalSubject.id, topic.id, null)}
-                              title="Сбросить оценку"
-                              className="ml-1 p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Practical works */}
-                  {modalSubject.practicalWorks && modalSubject.practicalWorks.map((pr: PracticalWork) => {
-                    const prId = `pr-${pr.number}`;
-                    const studentGrades = getStudentGradesForSubject(selectedStudent, modalSubject.id);
-                    const currentScore = studentGrades[prId];
-
-                    return (
-                      <div 
-                        key={pr.id || prId}
-                        className="p-4 rounded-xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/20 dark:bg-[#181B21] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
-                      >
-                        {/* Work description */}
-                        <div className="flex items-start gap-3">
-                          <span className="text-xs font-bold px-2 py-1 rounded-md bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 shrink-0">
-                            ПЗ №{pr.number}
-                          </span>
-                          <div>
-                            <h5 className="text-sm font-semibold text-[#111827] dark:text-[#F3F3EF]">
-                              {pr.title}
-                            </h5>
-                            <span className="text-xs text-[#6B7280] dark:text-[#8E95A2]">
-                              Практическая работа • {pr.hours} ч.
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Interactive Grade Picker (1-10) */}
-                        <div className="flex items-center gap-1.5 flex-wrap self-end md:self-center">
-                          <span className="text-xs font-semibold text-gray-500 mr-1 hidden lg:inline">
-                            Оценка:
-                          </span>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((scoreVal) => {
-                            const isSelectedScore = currentScore === scoreVal;
-                            return (
-                              <button
-                                key={scoreVal}
-                                onClick={() => handleSetGrade(selectedStudent.studentId, modalSubject.id, prId, scoreVal)}
-                                className={`w-7 h-7 rounded-lg text-xs font-bold font-mono transition-all ${
-                                  isSelectedScore
-                                    ? 'bg-purple-600 text-white shadow-md scale-110 ring-2 ring-purple-400'
-                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                                }`}
-                              >
-                                {scoreVal}
-                              </button>
-                            );
-                          })}
-
-                          {currentScore !== null && currentScore !== undefined && (
-                            <button
-                              onClick={() => handleSetGrade(selectedStudent.studentId, modalSubject.id, prId, null)}
+                              onClick={() => handleSetGrade(selectedStudent.studentId, modalSubject.id, t.id, null)}
                               title="Сбросить оценку"
                               className="ml-1 p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                             >
@@ -836,16 +1332,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   placeholder="Например: Назначить пересдачу ОКР в среду, сдать отчёт по практической работе №2..."
                   className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-[#121418] border border-gray-300 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
-                <span className="text-[11px] text-gray-400">
-                  Заметка видна только преподавателям и автоматически сохраняется при выходе из поля.
-                </span>
               </div>
             </div>
 
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21] flex items-center justify-between">
               <span className="text-xs text-gray-500">
-                Все выставленные оценки моментально пересчитывают средний балл и сохраняются.
+                Все выставленные оценки моментально сохраняются и пересчитывают средний балл.
               </span>
               <button
                 onClick={() => setSelectedStudent(null)}
@@ -877,7 +1370,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-              Вы уверены, что хотите сбросить оценку студенту <strong className="text-gray-900 dark:text-gray-200">{selectedStudentForReset.student.studentName}</strong>? Студент получит возможность пройти тест заново с одной попыткой.
+              Вы уверены, что хотите сбросить оценку студенту <strong className="text-gray-900 dark:text-gray-200">{selectedStudentForReset.student.studentName}</strong>? Студент получит возможность пройти тест заново.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">

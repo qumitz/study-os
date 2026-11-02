@@ -311,7 +311,13 @@ export default function App() {
   };
 
   // Handle topic completion & auto-unlocking of subsequent branches
-  const handleUpdateProgress = (topicId: string, score: number) => {
+  const handleUpdateProgress = (
+    topicId: string, 
+    score: number,
+    answers?: Record<number, number>,
+    correctCount?: number,
+    totalQuestions?: number
+  ) => {
     setAllProgress((prevAll) => {
       const current = prevAll[currentSubject.id] || { topicStatuses: {}, grades: {} };
       const nextStatuses = { ...current.topicStatuses, [topicId]: 'completed' as TopicStatus };
@@ -358,12 +364,18 @@ export default function App() {
 
     // Auto-sync into group journal if current user is a student
     if (currentUser?.id && currentUser.role === 'student' && currentUser.group) {
+      const topicObj = currentSubject.topics.find(t => t.id === topicId);
       updateStudentTopicGrade(
         currentUser.id,
         currentUser.group,
         currentSubject.id,
         topicId,
-        score
+        score,
+        topicObj?.code,
+        topicObj?.title,
+        answers,
+        correctCount,
+        totalQuestions
       );
     }
   };
@@ -390,11 +402,12 @@ export default function App() {
     setActiveTab('subjects');
   };
 
-  // Role switching: anyone can switch between student and teacher freely; admin role reserved for administrators
+  // Role switching: strictly reserved for system administrator
   const handleSwitchRole = (role: UserRole) => {
-    if (role === 'admin') {
-      const isAllowed = isSuperAdminEmail(currentUser.email, currentUser.name) || currentUser.role === 'admin';
-      if (!isAllowed) return;
+    const isAllowed = isSuperAdminEmail(currentUser.email, currentUser.name) || currentUser.role === 'admin';
+    if (!isAllowed) {
+      console.warn('Unauthorized role switch attempt blocked');
+      return;
     }
 
     const newUser: User = { ...currentUser, role };
@@ -515,7 +528,7 @@ export default function App() {
         />
 
         <main className="flex-1 overflow-y-auto">
-          {activeTab === 'admin' ? (
+          {activeTab === 'admin' && (isSuperAdminEmail(currentUser.email, currentUser.name) || currentUser.role === 'admin') ? (
             <AdminPanel
               currentUser={currentUser}
               allSubjects={subjects}
@@ -528,7 +541,7 @@ export default function App() {
                 if (tab === 'subjects') setInSubjectView(true);
               }}
             />
-          ) : activeTab === 'teacher' || (currentUser.role === 'teacher' && !inSubjectView && activeTab === 'dashboard') ? (
+          ) : (activeTab === 'teacher' && (currentUser.role === 'teacher' || currentUser.role === 'admin' || isSuperAdminEmail(currentUser.email, currentUser.name))) || (currentUser.role === 'teacher' && !inSubjectView && activeTab === 'dashboard') ? (
             <TeacherDashboard
               subject={currentSubject}
               currentUserGroup={currentUser.group}
