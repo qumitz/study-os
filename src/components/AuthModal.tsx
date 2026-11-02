@@ -25,7 +25,8 @@ import {
   signInWithSupabase, 
   signUpWithSupabase, 
   signInWithGoogleOAuth,
-  signInWithAppleOAuth 
+  signInWithAppleOAuth,
+  isSuperAdminEmail
 } from '../lib/supabase';
 
 interface AuthModalProps {
@@ -136,11 +137,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           }
 
           const groupObj = availableGroups.find(g => g.name === selectedGroupId || g.id === selectedGroupId) || availableGroups[0];
+          const safeRole: UserRole = (selectedRole === 'admin' && !isSuperAdminEmail(email, name)) ? 'student' : selectedRole;
           const { user, error } = await signUpWithSupabase({
             email,
             password,
             name: name.trim(),
-            role: selectedRole,
+            role: safeRole,
             group: groupObj.name,
             course: groupObj.course
           });
@@ -165,12 +167,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     // Fallback: Local offline login
     const groupObj = availableGroups.find(g => g.name === selectedGroupId || g.id === selectedGroupId) || availableGroups[0];
+    const safeRole: UserRole = (selectedRole === 'admin' && !isSuperAdminEmail(email, name)) ? 'student' : selectedRole;
     
     const loggedInUser: User = {
       id: 'usr-' + Date.now(),
       name: name.trim() || email.split('@')[0] || 'Пользователь',
       email: email,
-      role: selectedRole,
+      role: safeRole,
       group: groupObj.name,
       course: groupObj.course
     };
@@ -310,11 +313,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <label className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] block">
               {authMode === 'register' ? 'Роль в колледже:' : 'Войти под ролью:'}
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'student' as UserRole, label: 'Студент', icon: GraduationCap },
                 { id: 'teacher' as UserRole, label: 'Преподаватель', icon: Users },
-                { id: 'admin' as UserRole, label: 'Админ', icon: Shield },
               ].map(r => {
                 const Icon = r.icon;
                 const isSelected = selectedRole === r.id;

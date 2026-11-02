@@ -41,6 +41,7 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'tree' | 'list' | 'practicals' | 'tests'>('tree');
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [activePracticalForEditor, setActivePracticalForEditor] = useState<PracticalWork | null>(null);
 
   // Compute progress statistics
   const isTeacherOrAdmin = currentUser.role === 'teacher' || currentUser.role === 'admin';
