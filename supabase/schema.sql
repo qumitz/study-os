@@ -49,6 +49,19 @@ create policy "Пользователь может вставлять свой �
   to authenticated
   with check (auth.uid() = id);
 
+-- Удалять профили могут администраторы или сам владелец
+create policy "Удаление профилей разрешено админам и владельцу"
+  on public.profiles for delete
+  to authenticated
+  using (
+    auth.uid() = id
+    or exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role = 'admin'
+    )
+  );
+
 -- 5. Политики безопасности для student_progress:
 -- Студенты могут читать свой прогресс, преподаватели и админы — всех студентов
 create policy "Прогресс виден владельцу или преподавателям"
@@ -114,3 +127,38 @@ create trigger on_auth_user_created
 -- 7. Индексы для быстрого поиска
 create index if not exists idx_profiles_group_role on public.profiles(group_name, role);
 create index if not exists idx_student_progress_user_subject on public.student_progress(user_id, subject_id);
+
+-- 8. Функция полного каскадного удаления пользователя администратором
+create or replace function public.delete_user_by_admin(target_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  caller_role text;
+  caller_email text;
+begin
+  -- Проверяем права вызывающего
+  select role, email into caller_role, caller_email
+  from public.profiles
+  where id = auth.uid();
+
+  if coalesce(caller_role, '') != 'admin' 
+     and coalesce(caller_email, '') not in ('den.krivenchenko@gmail.com', 'den.krivencheko@gmail.com') then
+    return jsonb_build_object('success', false, 'error', 'Недостаточно прав администратора');
+  end if;
+
+  -- 1. Удаляем прогресс студента
+  delete from public.student_progress where user_id = target_user_id;
+
+  -- 2. Удаляем профиль
+  delete from public.profiles where id = target_user_id;
+
+  -- 3. Удаляем из auth.users
+  delete from auth.users where id = target_user_id;
+
+  return jsonb_build_object('success', true);
+exception when others then
+  return jsonb_build_object('success', false, 'error', SQLERRM);
+end;
+$$;

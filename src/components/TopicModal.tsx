@@ -122,39 +122,40 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#FFFFFF] dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-[#FFFFFF] dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#E5E7EB] dark:border-[#262A32] bg-[#F9FAFB] dark:bg-[#181B21]">
-          <div className="flex items-center gap-3">
-            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
+        <div className="flex items-center justify-between px-3.5 sm:px-6 py-3 sm:py-4 border-b border-[#E5E7EB] dark:border-[#262A32] bg-[#F9FAFB] dark:bg-[#181B21] gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <span className={`px-2 sm:px-2.5 py-1 text-xs font-bold rounded-lg shrink-0 ${
               topic.isExam 
                 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
                 : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
             }`}>
               {topic.code}
             </span>
-            <div className="flex flex-col">
-              <h2 className="text-base sm:text-lg font-semibold text-[#111827] dark:text-[#F3F3EF] leading-snug line-clamp-1">
+            <div className="flex flex-col min-w-0">
+              <h2 className="text-sm sm:text-lg font-semibold text-[#111827] dark:text-[#F3F3EF] leading-snug truncate">
                 {topic.title}
               </h2>
-              <span className="text-xs text-[#6B7280] dark:text-[#8E95A2]">
+              <span className="text-[11px] sm:text-xs text-[#6B7280] dark:text-[#8E95A2] truncate">
                 Объём: {topic.hours} ч. • {topic.isExam ? 'Обязательный контроль' : 'Теория и самопроверка'}
               </span>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isTeacherOrAdmin && (
               <button
                 onClick={() => setIsEditorOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition-colors shadow-xs"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition-colors shadow-xs"
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Редактировать тему {isAdmin ? '(Админ)' : '(Преподаватель)'}</span>
+                <span className="hidden sm:inline">Редактировать тему {isAdmin ? '(Админ)' : '(Преподаватель)'}</span>
+                <span className="sm:hidden">Изменить</span>
               </button>
             )}
 
@@ -168,7 +169,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
         </div>
 
         {/* Modal Navigation Tabs */}
-        <div className="flex items-center gap-2 px-5 sm:px-6 pt-3 border-b border-[#E5E7EB] dark:border-[#262A32] bg-[#FFFFFF] dark:bg-[#15181E]">
+        <div className="flex items-center gap-2 px-3.5 sm:px-6 pt-2 sm:pt-3 border-b border-[#E5E7EB] dark:border-[#262A32] bg-[#FFFFFF] dark:bg-[#15181E] overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('synopsis')}
             className={`flex items-center gap-2 pb-3 px-2 text-sm font-medium border-b-2 transition-all ${

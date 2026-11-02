@@ -156,7 +156,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   value={fullNameInput}
                   onChange={(e) => setFullNameInput(e.target.value)}
                   placeholder="Ваше ФИО"
-                  className="w-full px-3 py-1.5 text-xs sm:text-sm rounded-lg bg-white dark:bg-[#121418] border border-gray-300 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  className="w-full px-3 py-2 sm:py-1.5 text-base sm:text-sm rounded-lg bg-white dark:bg-[#121418] border border-gray-300 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                   autoFocus
                 />
                 <div className="flex items-center gap-2 pt-1">

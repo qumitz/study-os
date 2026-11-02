@@ -37,7 +37,14 @@ import {
   updateUserGroupInDb,
   isSuperAdminEmail 
 } from '../lib/supabase';
-import { getRegisteredStudentsForGroup, removeStudentFromRegistry, registerStudentInGroup } from '../lib/studentRegistry';
+import { 
+  getRegisteredStudentsForGroup, 
+  removeStudentFromRegistry, 
+  registerStudentInGroup,
+  markUserAsDeleted,
+  isUserDeleted,
+  removeUserFromDeleted
+} from '../lib/studentRegistry';
 import { getAvailableGroups, createCollegeGroup, deleteCollegeGroup } from '../lib/groupRegistry';
 
 interface AdminPanelProps {
@@ -60,6 +67,24 @@ const DEFAULT_TEACHERS: TeacherRecord[] = [
     room: 'Ауд. 312'
   }
 ];
+
+export function getSavedTeachers(): TeacherRecord[] {
+  const saved = localStorage.getItem('study_os_teachers');
+  if (saved !== null) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(t => !isUserDeleted(t.id, t.email));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  // Initial seed on very first run: only include default teachers that have not been deleted
+  const initial = DEFAULT_TEACHERS.filter(t => !isUserDeleted(t.id, t.email));
+  localStorage.setItem('study_os_teachers', JSON.stringify(initial));
+  return initial;
+}
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
@@ -156,6 +181,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       groups.forEach(g => {
         const localStudents = getRegisteredStudentsForGroup(g.name);
         localStudents.forEach(s => {
+          if (isUserDeleted(s.studentId, s.studentId)) return;
           mergedMap.set(s.studentId, {
             id: s.studentId,
             name: s.studentName,
@@ -167,29 +193,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         });
       });
 
-      // 2. Load teachers from local storage
-      const savedTeachers = localStorage.getItem('study_os_teachers');
-      if (savedTeachers) {
-        try {
-          const teachers: TeacherRecord[] = JSON.parse(savedTeachers);
-          teachers.forEach(t => {
-            mergedMap.set(t.id, {
-              id: t.id,
-              name: t.name,
-              email: t.email,
-              role: 'teacher',
-              group: '37В',
-              course: 3
-            });
-          });
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      // Add default teacher
-      DEFAULT_TEACHERS.forEach(t => {
-        if (!mergedMap.has(t.id)) {
+      // 2. Load teachers from local storage (or initial defaults if not yet initialized)
+      const currentTeachers = getSavedTeachers();
+      currentTeachers.forEach(t => {
+        if (!isUserDeleted(t.id, t.email)) {
           mergedMap.set(t.id, {
             id: t.id,
             name: t.name,
@@ -205,12 +212,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (hasSupabase) {
         const cloudProfiles = await fetchAllProfilesFromDb();
         cloudProfiles.forEach(p => {
-          mergedMap.set(p.id, p);
+          if (!isUserDeleted(p.id, p.email)) {
+            mergedMap.set(p.id, p);
+          }
         });
       }
 
       // Always ensure current user is present
-      if (currentUser?.id) {
+      if (currentUser?.id && !isUserDeleted(currentUser.id, currentUser.email)) {
         mergedMap.set(currentUser.id, currentUser);
       }
 
@@ -298,7 +307,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsDeletingUser(true);
 
     try {
-      // 1. Delete from Supabase cloud database
+      // 1. Mark user as permanently deleted in local registry
+      markUserAsDeleted(userToDelete.id, userToDelete.email);
+
+      // 2. Delete from Supabase cloud database if real remote user
       if (hasSupabase && !userToDelete.id.startsWith('local-')) {
         const res = await deleteProfileFromDb(userToDelete.id);
         if (!res.success && res.error) {
@@ -306,24 +318,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       }
 
-      // 2. Delete from local students registry
+      // 3. Delete from local students registry
       removeStudentFromRegistry(userToDelete.id, userToDelete.group || '37В');
 
-      // 3. Delete from local teachers list if teacher
+      // 4. Delete from local teachers list if teacher
       if (userToDelete.role === 'teacher') {
-        const savedTeachers = localStorage.getItem('study_os_teachers');
-        if (savedTeachers) {
-          try {
-            const list: TeacherRecord[] = JSON.parse(savedTeachers);
-            const updated = list.filter(t => t.id !== userToDelete.id && t.email !== userToDelete.email);
-            localStorage.setItem('study_os_teachers', JSON.stringify(updated));
-          } catch (e) {
-            console.error(e);
-          }
-        }
+        const currentTeachers = getSavedTeachers();
+        const updated = currentTeachers.filter(t => t.id !== userToDelete.id && t.email !== userToDelete.email);
+        localStorage.setItem('study_os_teachers', JSON.stringify(updated));
+        setTeachersList(updated);
       }
 
-      // 4. Update UI state
+      // 5. Update UI state
       setUsersList(prev => prev.filter(u => u.id !== userToDelete.id));
       showToast(`Пользователь ${userToDelete.name} удалён из системы и базы данных`, 'success');
       setUserToDelete(null);
@@ -478,16 +484,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
      3. TEACHERS MANAGEMENT
      ========================================================================= */
   const [teachersList, setTeachersList] = useState<TeacherRecord[]>(() => {
-    const saved = localStorage.getItem('study_os_teachers');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return DEFAULT_TEACHERS;
+    return getSavedTeachers();
   });
 
   const [isAddTeacherModalOpen, setIsAddTeacherModalOpen] = useState(false);
@@ -510,6 +507,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const teacherId = `tch-${Date.now()}`;
     const email = newTeacherEmail.trim() || `${newTeacherName.toLowerCase().replace(/\s+/g, '.')}@lidacollege.by`;
 
+    // Unmark in case they were previously deleted
+    removeUserFromDeleted(teacherId, email);
+
     const newTeacher: TeacherRecord = {
       id: teacherId,
       name: newTeacherName.trim(),
@@ -520,7 +520,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
 
     // Save locally
-    const updated = [...teachersList, newTeacher];
+    const currentTeachers = getSavedTeachers();
+    const updated = [...currentTeachers.filter(t => t.id !== teacherId && t.email !== email), newTeacher];
     setTeachersList(updated);
     localStorage.setItem('study_os_teachers', JSON.stringify(updated));
 
@@ -547,7 +548,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleConfirmDeleteTeacher = async () => {
     if (!teacherToDelete) return;
-    const updated = teachersList.filter(t => t.id !== teacherToDelete.id);
+    markUserAsDeleted(teacherToDelete.id, teacherToDelete.email);
+    const updated = teachersList.filter(t => t.id !== teacherToDelete.id && t.email !== teacherToDelete.email);
     setTeachersList(updated);
     localStorage.setItem('study_os_teachers', JSON.stringify(updated));
 
@@ -719,24 +721,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-[#E5E7EB] dark:border-[#262A32] pb-2 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-[#E5E7EB] dark:border-[#262A32] pb-2 overflow-x-auto no-scrollbar py-1">
         <button
           type="button"
           onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'users'
               ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] shadow-xs'
               : 'text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Участники сайта ({usersList.length})</span>
+          <span>Участники ({usersList.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('groups')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'groups'
               ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] shadow-xs'
               : 'text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -749,7 +751,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('subjects')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'subjects'
               ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] shadow-xs'
               : 'text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -762,7 +764,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('teachers')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'teachers'
               ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] shadow-xs'
               : 'text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -775,7 +777,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('schedule')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'schedule'
               ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] shadow-xs'
               : 'text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
@@ -800,15 +802,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 placeholder="Поиск по ФИО, email или группе..."
                 value={userSearchQuery}
                 onChange={e => setUserSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 text-xs sm:text-sm rounded-lg bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full pl-9 pr-4 py-2 sm:py-1.5 text-base sm:text-sm rounded-lg bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
-            <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#181B21] p-1 rounded-lg border border-gray-200 dark:border-gray-800 text-xs font-semibold">
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#181B21] p-1 rounded-lg border border-gray-200 dark:border-gray-800 text-xs font-semibold overflow-x-auto no-scrollbar">
               <button
                 type="button"
                 onClick={() => setUserRoleFilter('all')}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                className={`px-3 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   userRoleFilter === 'all'
                     ? 'bg-white dark:bg-[#252B35] text-blue-600 dark:text-blue-400 shadow-xs'
                     : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
@@ -819,7 +821,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setUserRoleFilter('student')}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                className={`px-3 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   userRoleFilter === 'student'
                     ? 'bg-white dark:bg-[#252B35] text-blue-600 dark:text-blue-400 shadow-xs'
                     : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
@@ -830,7 +832,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setUserRoleFilter('teacher')}
-                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                className={`px-3 py-1.5 sm:py-1 rounded-md transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   userRoleFilter === 'teacher'
                     ? 'bg-white dark:bg-[#252B35] text-blue-600 dark:text-blue-400 shadow-xs'
                     : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
@@ -853,57 +855,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Участники не найдены.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-[#181B21]/50 text-gray-500 font-semibold text-[11px] uppercase tracking-wider">
-                      <th className="py-3 px-4">Участник</th>
-                      <th className="py-3 px-4">Email</th>
-                      <th className="py-3 px-4">Роль</th>
-                      <th className="py-3 px-4">Группа / Курс</th>
-                      <th className="py-3 px-4 text-right">Действие</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {filteredUsers.map(user => {
-                      const isSelf = user.id === currentUser.id || isSuperAdminEmail(user.email, user.name);
-                      return (
-                        <tr key={user.id} className="hover:bg-gray-50/50 dark:hover:bg-[#181B21]/40 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                                user.role === 'admin'
-                                  ? 'bg-rose-600'
-                                  : user.role === 'teacher'
-                                  ? 'bg-indigo-600'
-                                  : 'bg-[#2563EB]'
-                              }`}>
-                                {user.name ? user.name.slice(0, 2).toUpperCase() : 'УЧ'}
-                              </div>
-                              <div>
-                                <span className="font-semibold text-[#111827] dark:text-[#F3F3EF] block">
-                                  {user.name || 'Без имени'}
-                                </span>
-                                {isSelf && (
-                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                                    (Вы / Текущий администратор)
-                                  </span>
-                                )}
-                              </div>
+              <>
+                {/* Mobile Cards List (< md screens) */}
+                <div className="block md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+                  {filteredUsers.map(user => {
+                    const isSelf = user.id === currentUser.id || isSuperAdminEmail(user.email, user.name);
+                    return (
+                      <div key={user.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                              user.role === 'admin'
+                                ? 'bg-rose-600'
+                                : user.role === 'teacher'
+                                ? 'bg-indigo-600'
+                                : 'bg-[#2563EB]'
+                            }`}>
+                              {user.name ? user.name.slice(0, 2).toUpperCase() : 'УЧ'}
                             </div>
-                          </td>
+                            <div className="min-w-0">
+                              <span className="font-semibold text-sm text-[#111827] dark:text-[#F3F3EF] block truncate">
+                                {user.name || 'Без имени'}
+                              </span>
+                              <span className="text-xs font-mono text-gray-500 dark:text-gray-400 block truncate">
+                                {user.email || '—'}
+                              </span>
+                              {isSelf && (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium block">
+                                  (Вы / Текущий администратор)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                          <td className="py-3 px-4 font-mono text-gray-600 dark:text-gray-400 text-xs">
-                            {user.email || '—'}
-                          </td>
-
-                          <td className="py-3 px-4">
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 block mb-1">
+                              Роль
+                            </label>
                             <select
                               value={user.role}
                               disabled={isSelf}
                               onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
-                              title={isSelf ? 'Нельзя изменить роль текущего супер-администратора' : 'Изменить роль пользователя'}
-                              className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500/50 ${
+                              className={`w-full px-2.5 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
                                 user.role === 'admin'
                                   ? 'bg-rose-50 dark:bg-rose-950/70 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300'
                                   : user.role === 'teacher'
@@ -915,59 +910,174 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <option value="teacher">Преподаватель</option>
                               <option value="admin">Администратор</option>
                             </select>
-                          </td>
+                          </div>
 
-                          <td className="py-3 px-4">
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 block mb-1">
+                              Группа
+                            </label>
                             <select
                               value={user.group || '37В'}
                               disabled={isSelf || user.role === 'teacher'}
                               onChange={(e) => handleUserGroupChange(user, e.target.value)}
-                              className="px-2 py-1 text-xs rounded-lg bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium"
-                              title="Перевести в другую учебную группу"
+                              className="w-full px-2.5 py-2 text-xs rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 font-medium"
                             >
                               {collegeGroups.map(g => (
                                 <option key={g.id} value={g.name}>
-                                  Группа {g.name} ({g.course} к.)
+                                  Гр. {g.name} ({g.course} к.)
                                 </option>
                               ))}
                             </select>
-                          </td>
+                          </div>
+                        </div>
 
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {user.role !== 'admin' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRoleChange(user, 'admin')}
-                                  title="Назначить администратором платформы"
-                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                                >
-                                  <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                                  <span className="hidden sm:inline">Сделать админом</span>
-                                </button>
-                              )}
-                              <button
-                                type="button"
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800/80">
+                          {user.role !== 'admin' && (
+                            <button
+                              type="button"
+                              onClick={() => handleRoleChange(user, 'admin')}
+                              className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Сделать админом</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={isSelf}
+                            onClick={() => setUserToDelete(user)}
+                            className={`px-3 py-1.5 rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold ${
+                              isSelf
+                                ? 'opacity-30 cursor-not-allowed text-gray-400'
+                                : 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60'
+                            }`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Удалить</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table View (>= md screens) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-[#181B21]/50 text-gray-500 font-semibold text-[11px] uppercase tracking-wider">
+                        <th className="py-3 px-4">Участник</th>
+                        <th className="py-3 px-4">Email</th>
+                        <th className="py-3 px-4">Роль</th>
+                        <th className="py-3 px-4">Группа / Курс</th>
+                        <th className="py-3 px-4 text-right">Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {filteredUsers.map(user => {
+                        const isSelf = user.id === currentUser.id || isSuperAdminEmail(user.email, user.name);
+                        return (
+                          <tr key={user.id} className="hover:bg-gray-50/50 dark:hover:bg-[#181B21]/40 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                                  user.role === 'admin'
+                                    ? 'bg-rose-600'
+                                    : user.role === 'teacher'
+                                    ? 'bg-indigo-600'
+                                    : 'bg-[#2563EB]'
+                                }`}>
+                                  {user.name ? user.name.slice(0, 2).toUpperCase() : 'УЧ'}
+                                </div>
+                                <div>
+                                  <span className="font-semibold text-[#111827] dark:text-[#F3F3EF] block">
+                                    {user.name || 'Без имени'}
+                                  </span>
+                                  {isSelf && (
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                      (Вы / Текущий администратор)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4 font-mono text-gray-600 dark:text-gray-400 text-xs">
+                              {user.email || '—'}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <select
+                                value={user.role}
                                 disabled={isSelf}
-                                onClick={() => setUserToDelete(user)}
-                                title={isSelf ? 'Нельзя удалить текущего администратора' : 'Удалить участника из базы данных'}
-                                className={`p-2 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold ${
-                                  isSelf
-                                    ? 'opacity-30 cursor-not-allowed text-gray-400'
-                                    : 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/60'
+                                onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
+                                title={isSelf ? 'Нельзя изменить роль текущего супер-администратора' : 'Изменить роль пользователя'}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500/50 ${
+                                  user.role === 'admin'
+                                    ? 'bg-rose-50 dark:bg-rose-950/70 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300'
+                                    : user.role === 'teacher'
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/70 border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-300'
+                                    : 'bg-blue-50 dark:bg-blue-950/70 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300'
                                 }`}
                               >
-                                <Trash2 className="w-4 h-4" />
-                                <span className="hidden sm:inline">Удалить</span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                <option value="student">Студент</option>
+                                <option value="teacher">Преподаватель</option>
+                                <option value="admin">Администратор</option>
+                              </select>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <select
+                                value={user.group || '37В'}
+                                disabled={isSelf || user.role === 'teacher'}
+                                onChange={(e) => handleUserGroupChange(user, e.target.value)}
+                                className="px-2 py-1 text-xs rounded-lg bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium"
+                                title="Перевести в другую учебную группу"
+                              >
+                                {collegeGroups.map(g => (
+                                  <option key={g.id} value={g.name}>
+                                    Группа {g.name} ({g.course} к.)
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {user.role !== 'admin' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRoleChange(user, 'admin')}
+                                    title="Назначить администратором платформы"
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+                                    <span className="hidden sm:inline">Сделать админом</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={isSelf}
+                                  onClick={() => setUserToDelete(user)}
+                                  title={isSelf ? 'Нельзя удалить текущего администратора' : 'Удалить участника из базы данных'}
+                                  className={`p-2 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold ${
+                                    isSelf
+                                      ? 'opacity-30 cursor-not-allowed text-gray-400'
+                                      : 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/60'
+                                  }`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  <span className="hidden sm:inline">Удалить</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>

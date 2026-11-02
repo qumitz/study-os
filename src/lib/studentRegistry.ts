@@ -1,9 +1,65 @@
 import { StudentGradeRecord, User } from '../types';
 
 const STORAGE_PREFIX = 'study_os_students_';
+const DELETED_USERS_STORAGE_KEY = 'study_os_deleted_user_identifiers';
 
 /**
- * Filter out legacy hardcoded mock student records
+ * Get all deleted user identifiers (IDs and normalized emails)
+ */
+export function getDeletedUserIdentifiers(): string[] {
+  try {
+    const saved = localStorage.getItem(DELETED_USERS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Mark a user identifier (ID and optional email) as permanently deleted
+ */
+export function markUserAsDeleted(id: string, email?: string): void {
+  try {
+    const list = getDeletedUserIdentifiers();
+    const additions: string[] = [];
+    if (id) additions.push(id.toLowerCase().trim());
+    if (email) additions.push(email.toLowerCase().trim());
+    const updated = Array.from(new Set([...list, ...additions]));
+    localStorage.setItem(DELETED_USERS_STORAGE_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to mark user as deleted', e);
+  }
+}
+
+/**
+ * Check if a user has been deleted by an administrator
+ */
+export function isUserDeleted(id?: string, email?: string): boolean {
+  if (!id && !email) return false;
+  const list = getDeletedUserIdentifiers();
+  if (id && list.includes(id.toLowerCase().trim())) return true;
+  if (email && list.includes(email.toLowerCase().trim())) return true;
+  return false;
+}
+
+/**
+ * Remove a user from the deleted list (if they are re-registered or re-added)
+ */
+export function removeUserFromDeleted(id: string, email?: string): void {
+  try {
+    const list = getDeletedUserIdentifiers();
+    const targets: string[] = [];
+    if (id) targets.push(id.toLowerCase().trim());
+    if (email) targets.push(email.toLowerCase().trim());
+    const updated = list.filter(item => !targets.includes(item));
+    localStorage.setItem(DELETED_USERS_STORAGE_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to unmark user as deleted', e);
+  }
+}
+
+/**
+ * Filter out legacy hardcoded mock student records and deleted users
  */
 export function sanitizeStudentRecords(records: any[]): StudentGradeRecord[] {
   if (!Array.isArray(records)) return [];
@@ -13,6 +69,7 @@ export function sanitizeStudentRecords(records: any[]): StudentGradeRecord[] {
     // Filter out old hardcoded mock IDs
     if (id.startsWith('st-')) return false;
     if (id === 'usr-student-1' && s.studentName === 'Алексей Иванов') return false;
+    if (isUserDeleted(id)) return false;
     return Boolean(s.studentId && s.studentName);
   });
 }

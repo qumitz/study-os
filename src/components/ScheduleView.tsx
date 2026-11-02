@@ -117,6 +117,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
   // Real calendar week state (defaults to today)
   const [currentWeekDate, setCurrentWeekDate] = useState<Date>(() => new Date());
 
+  // Mobile selected day index (0 = Monday, ..., 6 = Sunday)
+  const [mobileSelectedDay, setMobileSelectedDay] = useState<number>(() => {
+    const day = new Date().getDay();
+    return day === 0 ? 6 : day - 1;
+  });
+
   // Helper to get Monday of the selected week
   const getMonday = (d: Date) => {
     const date = new Date(d);
@@ -388,8 +394,161 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
         </div>
       )}
 
-      {/* Timetable Grid */}
-      <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] overflow-x-auto shadow-sm">
+      {/* Mobile Day-by-Day View (< md screens) */}
+      <div className="block md:hidden space-y-4">
+        {/* Horizontal Days Selector Ribbon */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-0.5">
+          {days.map((d, idx) => {
+            const isSelected = mobileSelectedDay === idx;
+            const dayClassCount = scheduleItems.filter(item => item.dayIndex === idx).length;
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setMobileSelectedDay(idx)}
+                className={`flex-1 min-w-[44px] py-2 px-1 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center relative ${
+                  isSelected
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : d.isToday
+                    ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60'
+                    : 'bg-white dark:bg-[#15181E] border border-gray-200 dark:border-[#262A32] text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>
+                  {d.day}
+                </span>
+                <span className="text-sm font-bold mt-0.5">
+                  {d.date}
+                </span>
+                {dayClassCount > 0 && (
+                  <span className={`w-1.5 h-1.5 rounded-full mt-1 ${isSelected ? 'bg-white' : 'bg-blue-600 dark:bg-blue-400'}`} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected Day Header */}
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <h3 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF]">
+              {days[mobileSelectedDay]?.fullDay}, {days[mobileSelectedDay]?.date} {days[mobileSelectedDay]?.monthShort}
+            </h3>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              {(() => {
+                const count = scheduleItems.filter(i => i.dayIndex === mobileSelectedDay).length;
+                if (count === 0) return 'Занятий нет';
+                if (count === 1) return '1 пара';
+                if (count >= 2 && count <= 4) return `${count} пары`;
+                return `${count} пар`;
+              })()}
+            </p>
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => handleOpenAddModal(mobileSelectedDay)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Пара</span>
+            </button>
+          )}
+        </div>
+
+        {/* Mobile Classes List */}
+        <div className="space-y-2.5">
+          {(() => {
+            const dayClasses = scheduleItems
+              .filter(item => item.dayIndex === mobileSelectedDay)
+              .sort((a, b) => a.time.localeCompare(b.time));
+
+            if (dayClasses.length === 0) {
+              return (
+                <div className="p-6 rounded-2xl border border-dashed border-gray-200 dark:border-[#262A32] bg-white/50 dark:bg-[#15181E]/50 text-center space-y-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    На этот день занятия не запланированы
+                  </p>
+                  {canEdit && (
+                    <button
+                      onClick={() => handleOpenAddModal(mobileSelectedDay)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Назначить пару на этот день</span>
+                    </button>
+                  )}
+                </div>
+              );
+            }
+
+            return dayClasses.map(cls => (
+              <div
+                key={cls.id}
+                onClick={() => canEdit && handleOpenEditModal(cls)}
+                className={`p-3.5 rounded-2xl border-l-4 border shadow-xs transition-all ${
+                  canEdit ? 'active:scale-[0.99] cursor-pointer' : ''
+                } ${cls.color || 'border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/30'} border-gray-200/70 dark:border-[#262A32] bg-white dark:bg-[#15181E]`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {cls.type}
+                    </span>
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-gray-400" />
+                      {cls.time}
+                    </span>
+                  </div>
+                  {canEdit && (
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => handleOpenEditModal(cls, e)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+                        title="Редактировать"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteItem(cls.id, e)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                        title="Удалить"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF] leading-snug mt-1.5">
+                  {cls.title}
+                </h4>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    <span>{cls.room}</span>
+                  </div>
+                  {cls.teacher && (
+                    <div className="flex items-center gap-1">
+                      <UserIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span className="truncate max-w-[200px]">{cls.teacher}</span>
+                    </div>
+                  )}
+                </div>
+
+                {cls.notes && (
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 italic mt-2 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+                    {cls.notes}
+                  </div>
+                )}
+              </div>
+            ));
+          })()}
+        </div>
+      </div>
+
+      {/* Timetable Grid (Desktop >= md screens) */}
+      <div className="hidden md:block rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] overflow-x-auto shadow-sm">
         {/* Days Header */}
         <div className="grid grid-cols-7 min-w-[840px] border-b border-[#E5E7EB] dark:border-[#262A32]">
           {days.map((d, idx) => (
@@ -587,7 +746,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                 <select
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {collegeSubjects.map((subj: string, idx: number) => (
                     <option key={idx} value={subj}>
@@ -601,7 +760,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                     placeholder="Либо введите своё название предмета..."
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -616,7 +775,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                   <select
                     value={formType}
                     onChange={(e) => setFormType(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {LESSON_TYPES.map((t, idx) => (
                       <option key={idx} value={t}>
@@ -634,7 +793,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                   <select
                     value={formTime}
                     onChange={(e) => setFormTime(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     {TIME_SLOTS.map((slot, idx) => (
                       <option key={idx} value={slot.value}>
@@ -656,7 +815,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                     value={formRoom}
                     onChange={(e) => setFormRoom(e.target.value)}
                     placeholder="Ауд. 312"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
@@ -669,7 +828,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                     value={formTeacher}
                     onChange={(e) => setFormTeacher(e.target.value)}
                     placeholder="Селедцов Александр Игоревич"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -685,7 +844,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                       key={c.id}
                       type="button"
                       onClick={() => setFormColorId(c.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
                         formColorId === c.id
                           ? 'border-blue-500 ring-2 ring-blue-500/20 font-bold'
                           : 'border-gray-200 dark:border-gray-800 opacity-80 hover:opacity-100'
@@ -708,7 +867,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubj
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
                   placeholder="Например: 1-я подгруппа, сдать отчёт"
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 sm:py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-base sm:text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 

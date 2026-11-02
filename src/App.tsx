@@ -492,7 +492,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex bg-[#FBFBFA] dark:bg-[#0F1115] text-[#111827] dark:text-[#F3F3EF] transition-colors duration-200 relative overflow-x-hidden">
+    <div className="min-h-screen flex bg-[#FBFBFA] dark:bg-[#0F1115] text-[#111827] dark:text-[#F3F3EF] transition-colors duration-200 relative overflow-x-hidden w-full max-w-full">
       {/* Onboarding Modal for new Google sign-ins */}
       {currentUser.needsOnboarding && (
         <OnboardingModal
@@ -514,7 +514,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0 relative z-10">
+      <div className="flex-1 flex flex-col min-w-0 w-full max-w-full pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0 relative z-10 overflow-x-hidden">
         <Header
           isDarkMode={isDarkMode}
           setIsDarkMode={setIsDarkMode}
@@ -527,7 +527,7 @@ export default function App() {
           isSuperAdmin={isSuperAdminEmail(currentUser.email, currentUser.name)}
         />
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full">
           {activeTab === 'admin' && (isSuperAdminEmail(currentUser.email, currentUser.name) || currentUser.role === 'admin') ? (
             <AdminPanel
               currentUser={currentUser}
@@ -627,6 +627,7 @@ export default function App() {
             setActiveTab(tab);
             setInSubjectView(tab === 'subjects');
           }}
+          currentUser={currentUser}
         />
       </div>
 

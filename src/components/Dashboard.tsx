@@ -160,10 +160,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-8 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full animate-in fade-in duration-200">
+    <div className="flex flex-col gap-6 sm:gap-8 p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full animate-in fade-in duration-200">
       {/* Welcome Banner */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] dark:text-[#F3F3EF] tracking-tight">
+        <h1 className="text-xl sm:text-3xl font-bold text-[#111827] dark:text-[#F3F3EF] tracking-tight">
           Привет, {getFirstName(currentUser?.name)}! 👋
         </h1>
         <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#8E95A2]">
@@ -171,23 +171,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </p>
       </div>
 
-      {/* 4 KPI Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4 KPI Metrics Grid (2x2 on Mobile, 4 columns on Desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {/* KPI 1: Общий прогресс */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-4">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-3 sm:space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
+            <span className="text-[11px] sm:text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] truncate">
               Общий прогресс
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center shrink-0">
               <TrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
+            <div className="text-xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
               {progressPercent}%
             </div>
-            <div className="w-full h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-3 overflow-hidden">
+            <div className="w-full h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-2 sm:mt-3 overflow-hidden">
               <div 
                 className="h-full bg-[#2563EB] rounded-full transition-all duration-500"
                 style={{ width: `${progressPercent}%` }}
@@ -197,71 +197,71 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* KPI 2: Завершено тем */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-4">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-3 sm:space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
+            <span className="text-[11px] sm:text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] truncate">
               Завершено тем
             </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
               <BookOpen className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
-              {completedTopics} <span className="text-sm font-normal text-gray-400">/ {totalTopics}</span>
+            <div className="text-xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
+              {completedTopics} <span className="text-xs sm:text-sm font-normal text-gray-400">/ {totalTopics}</span>
             </div>
-            <span className="inline-block mt-2 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-              {totalTopics - completedTopics > 0 ? `Осталось ${totalTopics - completedTopics} тем` : 'Все темы изучены!'}
+            <span className="inline-block mt-1 sm:mt-2 text-[10px] sm:text-[11px] font-medium text-emerald-600 dark:text-emerald-400 truncate max-w-full">
+              {totalTopics - completedTopics > 0 ? `Осталось ${totalTopics - completedTopics}` : 'Все темы!'}
             </span>
           </div>
         </div>
 
         {/* KPI 3: Практические работы */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-4">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-3 sm:space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
-              Практические работы
+            <span className="text-[11px] sm:text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] truncate">
+              Практикум
             </span>
-            <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
               <ClipboardList className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
-              {totalPracticals} <span className="text-sm font-normal text-gray-400">работ</span>
+            <div className="text-xl sm:text-3xl font-extrabold text-[#111827] dark:text-[#F3F3EF]">
+              {totalPracticals} <span className="text-xs sm:text-sm font-normal text-gray-400">работ</span>
             </div>
-            <span className="inline-block mt-2 text-[11px] font-medium text-[#6B7280] dark:text-[#9CA3AF]">
-              По КТП Лидского колледжа
+            <span className="inline-block mt-1 sm:mt-2 text-[10px] sm:text-[11px] font-medium text-[#6B7280] dark:text-[#9CA3AF] truncate max-w-full">
+              По КТП колледжа
             </span>
           </div>
         </div>
 
         {/* KPI 4: Ближайший дедлайн */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-4">
+        <div className="p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between space-y-3 sm:space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
-              Ближайший дедлайн
+            <span className="text-[11px] sm:text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] truncate">
+              Дедлайн
             </span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
               <Clock className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
-            <div className="text-xl sm:text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">
+            <div className="text-base sm:text-2xl font-bold text-[#111827] dark:text-[#F3F3EF] truncate">
               Завтра, 10:00
             </div>
-            <span className="inline-block mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 truncate max-w-full">
-              Основы ИБ • Тест 1.1: Термины и базовые понятия
+            <span className="inline-block mt-1 text-[10px] sm:text-[11px] font-medium text-amber-600 dark:text-amber-400 truncate max-w-full">
+              Основы ИБ • Тест 1.1
             </span>
           </div>
         </div>
       </div>
 
       {/* Subjects Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="space-y-3 sm:space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-[#111827] dark:text-[#F3F3EF]">
+            <h2 className="text-base sm:text-lg font-bold text-[#111827] dark:text-[#F3F3EF]">
               Предметы группы {primarySubject?.group || '37В'}
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] border border-blue-200 dark:border-blue-900/40">
@@ -271,9 +271,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
           {primarySubject && (
             <button 
               onClick={() => handleCardClick(primarySubject)}
-              className="flex items-center gap-1 text-xs font-semibold text-[#2563EB] dark:text-[#60A5FA] hover:underline"
+              className="flex items-center gap-1 text-xs font-semibold text-[#2563EB] dark:text-[#60A5FA] hover:underline self-start sm:self-auto cursor-pointer"
             >
-              <span>Открыть интерактивную карту</span>
+              <span>Интерактивная карта</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}

@@ -603,7 +603,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             {/* Months Tabs */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
               {ACADEMIC_MONTHS.map(m => {
                 const isSelected = m.id === selectedMonthId;
                 return (
@@ -611,15 +611,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     key={m.id}
                     type="button"
                     onClick={() => setSelectedMonthId(m.id)}
-                    className={`p-2 rounded-xl text-center border transition-all cursor-pointer ${
+                    className={`px-3 py-2 rounded-xl text-center border transition-all cursor-pointer shrink-0 ${
                       isSelected
                         ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs font-bold'
                         : 'bg-gray-50 dark:bg-[#181B21] border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:border-indigo-300'
                     }`}
                   >
-                    <span className="text-xs block leading-tight">{m.name}</span>
+                    <span className="text-xs font-semibold block leading-tight">{m.name}</span>
                     <span className={`text-[10px] block mt-0.5 ${isSelected ? 'text-indigo-100' : 'text-gray-400'}`}>
-                      {m.semester}-й семестр
+                      {m.semester}-й сем.
                     </span>
                   </button>
                 );
@@ -628,7 +628,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
 
           {/* Matrix Table */}
-          <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] shadow-sm overflow-hidden p-5 space-y-4">
+          <div className="rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-white dark:bg-[#15181E] shadow-sm overflow-hidden p-3.5 sm:p-5 space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
@@ -646,7 +646,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
                   placeholder="Поиск по фамилии..."
-                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full pl-9 pr-3 py-2 sm:py-1.5 text-base sm:text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -1118,25 +1118,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           MODAL: ПРОВЕРКА РАБОТЫ ПРЕПОДАВАТЕЛЕМ (ОТЧЁТ ВОРД)
           ===================================================================== */}
       {activeReviewSubmission && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
           <div 
-            className="w-full max-w-5xl h-[92vh] rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden"
+            className="w-full max-w-5xl h-[94vh] sm:h-[92vh] rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="px-6 py-3.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21] flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+            <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21] flex items-center justify-between shrink-0 gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-[#111827] dark:text-[#F3F3EF] truncate">
                   Проверка: Практическая работа № {activeReviewSubmission.workNumber}
                 </h3>
-                <p className="text-xs text-gray-500">
-                  {activeReviewSubmission.subjectTitle} • Учащийся: <strong>{activeReviewSubmission.studentName}</strong> (Группа {activeReviewSubmission.group})
+                <p className="text-[11px] sm:text-xs text-gray-500 truncate">
+                  {activeReviewSubmission.subjectTitle} • Учащийся: <strong>{activeReviewSubmission.studentName}</strong> ({activeReviewSubmission.group})
                 </p>
               </div>
 
               <button
                 onClick={() => setActiveReviewSubmission(null)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1145,9 +1145,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* Split Content: Left Document View, Right Grading Panel */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
               {/* Left Document View */}
-              <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-[#F1F3F5] dark:bg-[#0D0F14] flex justify-center">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-8 bg-[#F1F3F5] dark:bg-[#0D0F14] flex justify-center">
                 <div 
-                  className="w-full max-w-[800px] bg-white dark:bg-[#1A1D24] border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-8 sm:p-12 text-gray-900 dark:text-gray-100 leading-relaxed font-serif"
+                  className="w-full max-w-[800px] bg-white dark:bg-[#1A1D24] border border-gray-300 dark:border-gray-700 rounded-lg shadow-lg p-4 sm:p-12 text-gray-900 dark:text-gray-100 leading-relaxed font-serif"
                   style={{
                     fontFamily: "'Times New Roman', serif",
                     fontSize: '14pt',
@@ -1158,7 +1158,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
 
               {/* Right Grading & Feedback Panel */}
-              <aside className="w-full md:w-80 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#15181E] p-5 flex flex-col justify-between shrink-0 overflow-y-auto space-y-4">
+              <aside className="w-full md:w-80 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-[#15181E] p-4 sm:p-5 flex flex-col justify-between shrink-0 overflow-y-auto space-y-4">
                 <div className="space-y-4">
                   <h4 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF] flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-indigo-600" />
@@ -1198,7 +1198,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       value={reviewFeedbackInput}
                       onChange={(e) => setReviewFeedbackInput(e.target.value)}
                       placeholder="Например: Работа выполнена в полном объёме, выводы сделаны корректно..."
-                      className="w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#181B21] text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1A1E24] text-base sm:text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-sans"
                     />
                   </div>
 

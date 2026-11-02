@@ -1,15 +1,23 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   CheckCircle2, 
   Lock, 
   Play, 
-  Award, 
   BookOpen, 
   FlaskConical, 
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
-  Sparkles
+  Sparkles,
+  Maximize2,
+  Minimize2,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Compass,
+  Target,
+  Trophy
 } from 'lucide-react';
 import { Topic, TopicStatus } from '../types';
 
@@ -29,55 +37,236 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
   isTeacher = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  
+  // Responsive default scale: 0.65 on narrow mobile screens, 1.0 on desktop
+  const isMobileInitial = typeof window !== 'undefined' ? window.innerWidth < 640 : false;
+  const [scale, setScale] = useState<number>(isMobileInitial ? 0.65 : 1);
+  const [position, setPosition] = useState<{ x: number; y: number }>({
+    x: isMobileInitial ? 12 : 0,
+    y: isMobileInitial ? 15 : 0
+  });
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Only drag if left click and not on a node button
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
+  // Mutable refs to prevent stale closures and track active pointers
+  const positionRef = useRef(position);
+  positionRef.current = position;
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setPosition({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+
+  const isDraggingRef = useRef(false);
+  const clickStartRef = useRef({ x: 0, y: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const hasMovedRef = useRef(false);
+
+  // Pointer tracking for multi-touch (pinch-zoom and pan)
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef<number>(1);
+
+  // Zoom and Pan Controls
+  const handleZoom = (delta: number) => {
+    setScale(prev => {
+      const next = Math.min(Math.max(Number((prev + delta).toFixed(2)), 0.35), 1.8);
+      scaleRef.current = next;
+      return next;
     });
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
+  const handleReset = useCallback(() => {
+    const isMobile = typeof window !== 'undefined' ? window.innerWidth < 640 : false;
+    const nextScale = isMobile ? 0.65 : 1;
+    const nextPos = { x: isMobile ? 12 : 0, y: isMobile ? 15 : 0 };
+    scaleRef.current = nextScale;
+    positionRef.current = nextPos;
+    setScale(nextScale);
+    setPosition(nextPos);
+  }, []);
+
+  const handlePan = (dx: number, dy: number) => {
+    setPosition(prev => {
+      const next = { x: prev.x + dx, y: prev.y + dy };
+      positionRef.current = next;
+      return next;
+    });
   };
 
-  const handleZoom = (delta: number) => {
-    setScale(prev => Math.min(Math.max(prev + delta, 0.6), 1.5));
+  // Jump smoothly to a specific topic
+  const handleJumpToTopic = (targetTopic: Topic | undefined) => {
+    if (!targetTopic || !containerRef.current) return;
+    const container = containerRef.current;
+    const containerWidth = container.clientWidth || 375;
+    const containerHeight = container.clientHeight || 450;
+    const currentScale = scaleRef.current;
+
+    // Center target topic on the screen
+    const targetX = Math.round(containerWidth / 2 - (targetTopic.position.x + 128) * currentScale);
+    const targetY = Math.round(containerHeight / 2 - (targetTopic.position.y + 60) * currentScale);
+
+    positionRef.current = { x: targetX, y: targetY };
+    setPosition({ x: targetX, y: targetY });
   };
 
-  const handleReset = () => {
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
+  // Modern Unified Pointer Events (works for both touch & mouse)
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only primary mouse click or any touch
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (_) {
+      // ignore
+    }
+
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size === 1) {
+      isDraggingRef.current = true;
+      hasMovedRef.current = false;
+      clickStartRef.current = { x: e.clientX, y: e.clientY };
+      dragStartRef.current = {
+        x: e.clientX - positionRef.current.x,
+        y: e.clientY - positionRef.current.y
+      };
+      setIsDragging(true);
+    } else if (activePointersRef.current.size === 2) {
+      // 2 fingers -> Pinch zoom
+      const pts = Array.from(activePointersRef.current.values());
+      pinchStartDistRef.current = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStartScaleRef.current = scaleRef.current;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    }
   };
 
-  // Compute dynamic bounds so SVG canvas wraps all nodes seamlessly
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activePointersRef.current.has(e.pointerId)) return;
+
+    // Update stored coordinates for this pointer
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size === 1 && isDraggingRef.current) {
+      const dist = Math.hypot(e.clientX - clickStartRef.current.x, e.clientY - clickStartRef.current.y);
+      if (dist > 6) {
+        hasMovedRef.current = true;
+      }
+      const nextX = e.clientX - dragStartRef.current.x;
+      const nextY = e.clientY - dragStartRef.current.y;
+      positionRef.current = { x: nextX, y: nextY };
+      setPosition({ x: nextX, y: nextY });
+    } else if (activePointersRef.current.size === 2 && pinchStartDistRef.current) {
+      hasMovedRef.current = true;
+      const pts = Array.from(activePointersRef.current.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const factor = currentDist / pinchStartDistRef.current;
+      const nextScale = Math.min(Math.max(Number((pinchStartScaleRef.current * factor).toFixed(2)), 0.35), 1.8);
+      scaleRef.current = nextScale;
+      setScale(nextScale);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch (_) {}
+
+    activePointersRef.current.delete(e.pointerId);
+
+    if (activePointersRef.current.size === 0) {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      pinchStartDistRef.current = null;
+      // Retain hasMovedRef briefly so any trailing synthetic click is ignored
+      setTimeout(() => {
+        hasMovedRef.current = false;
+      }, 160);
+    } else if (activePointersRef.current.size === 1) {
+      // Revert from pinch back to 1-finger drag smoothly
+      const remainingPt = Array.from(activePointersRef.current.values())[0];
+      dragStartRef.current = {
+        x: remainingPt.x - positionRef.current.x,
+        y: remainingPt.y - positionRef.current.y
+      };
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      pinchStartDistRef.current = null;
+    }
+  };
+
+  // Strictly prevent browser page scrolling when interacting with tree
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventDefaultScroll = (e: TouchEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('touchmove', preventDefaultScroll, { passive: false });
+    return () => {
+      container.removeEventListener('touchmove', preventDefaultScroll);
+    };
+  }, []);
+
+  // Compute dynamic bounds for SVG canvas
   const maxX = Math.max(...topics.map(t => t.position?.x || 0), 2400);
   const maxY = Math.max(...topics.map(t => t.position?.y || 0), 600);
   const canvasWidth = `${maxX + 500}px`;
   const canvasHeight = `${Math.max(850, maxY + 350)}px`;
 
+  // First in-progress or exam topic for quick jumps
+  const firstActiveTopic = topics.find(t => isTeacher || topicStatuses[t.id] === 'in_progress') || topics[0];
+  const examTopic = topics.find(t => t.isExam);
+
   return (
-    <div className="relative w-full h-[620px] rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-[#FBFBFA] dark:bg-[#0F1115] overflow-hidden select-none shadow-inner">
-      {/* Canvas Grid Background */}
+    <div 
+      className={`skill-tree-container transition-all duration-200 ${
+        isExpanded
+          ? 'fixed inset-0 z-50 p-2 sm:p-4 bg-[#0F1115]/95 backdrop-blur-xl flex flex-col'
+          : 'relative w-full max-w-full h-[450px] sm:h-[620px] rounded-2xl border border-[#E5E7EB] dark:border-[#262A32] bg-[#FBFBFA] dark:bg-[#0F1115] overflow-hidden select-none shadow-inner'
+      }`}
+      style={{
+        contain: 'paint',
+        isolation: 'isolate',
+        touchAction: 'none'
+      }}
+    >
+      {/* Expanded Mode Top Toolbar */}
+      {isExpanded && (
+        <div className="flex items-center justify-between pb-2 px-1 text-white shrink-0">
+          <span className="text-xs sm:text-sm font-bold flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+            Интерактивная карта (Полноэкранный режим)
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsExpanded(false)}
+            className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+            <span>Свернуть</span>
+          </button>
+        </div>
+      )}
+
+      {/* Canvas Grid Background Container */}
       <div 
         ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className={`w-full h-full cursor-grab active:cursor-grabbing skill-tree-grid overflow-hidden relative`}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="w-full h-full cursor-grab active:cursor-grabbing skill-tree-grid overflow-hidden relative select-none rounded-xl"
+        style={{
+          touchAction: 'none',
+          overscrollBehavior: 'contain',
+          contain: 'strict'
+        }}
       >
         {/* Transformable Canvas Group */}
         <div 
@@ -191,12 +380,17 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
                 className="z-10"
               >
                 <div
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (hasMovedRef.current) {
+                      // Was a drag gesture, do not open topic!
+                      return;
+                    }
                     if (!isLocked) {
                       onSelectTopic(topic);
                     }
                   }}
-                  className={`skill-tree-node-card group relative flex flex-col w-64 p-3.5 rounded-2xl border transition-all duration-200 ${
+                  className={`skill-tree-node-card group relative flex flex-col w-64 p-3.5 rounded-2xl border transition-all duration-200 select-none ${
                     isCompleted
                       ? 'bg-white dark:bg-[#181B21] border-emerald-500/50 shadow-md shadow-emerald-500/10 hover:border-emerald-500 hover:shadow-lg cursor-pointer'
                       : isTeacher
@@ -279,36 +473,148 @@ export const SkillTree: React.FC<SkillTreeProps> = ({
         </div>
       </div>
 
-      {/* Floating Canvas Controls (Zoom in, Zoom out, Reset) */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-1.5 p-1.5 rounded-xl bg-white/90 dark:bg-[#181B21]/90 backdrop-blur border border-[#E5E7EB] dark:border-[#262A32] shadow-md z-20">
-        <button
-          onClick={() => handleZoom(0.15)}
-          title="Приблизить"
-          className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => handleZoom(-0.15)}
-          title="Отдалить"
-          className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <div className="w-px h-4 bg-gray-200 dark:bg-gray-800 my-auto"></div>
-        <button
-          onClick={handleReset}
-          title="Сбросить масштаб"
-          className="p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
-        <span className="text-[10px] font-mono font-semibold px-1 text-gray-500">
-          {Math.round(scale * 100)}%
-        </span>
+      {/* Floating Canvas Controls (Quick-Jump pills + Pan Buttons + Zoom + Fullscreen) */}
+      <div className="absolute bottom-2.5 right-2.5 left-2.5 sm:left-auto flex flex-wrap items-center justify-between sm:justify-end gap-1.5 p-1.5 rounded-2xl bg-white/95 dark:bg-[#181B21]/95 backdrop-blur-md border border-[#E5E7EB] dark:border-[#262A32] shadow-xl z-20">
+        
+        {/* Quick-Jump Navigation Pills for Fast Exploration */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+          <button
+            type="button"
+            onClick={handleReset}
+            title="Перейти к началу карты"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all cursor-pointer shrink-0"
+          >
+            <Compass className="w-3 h-3 text-blue-500" />
+            <span>Старт</span>
+          </button>
+
+          {firstActiveTopic && (
+            <button
+              type="button"
+              onClick={() => handleJumpToTopic(firstActiveTopic)}
+              title={`Перейти к текущей теме: ${firstActiveTopic.title}`}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 active:scale-95 transition-all cursor-pointer shrink-0"
+            >
+              <Target className="w-3 h-3 text-[#2563EB]" />
+              <span className="truncate max-w-[90px] xs:max-w-[120px]">{firstActiveTopic.code}</span>
+            </button>
+          )}
+
+          {examTopic && (
+            <button
+              type="button"
+              onClick={() => handleJumpToTopic(examTopic)}
+              title="Перейти к обязательной контрольной работе (ОКР)"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40 active:scale-95 transition-all cursor-pointer shrink-0"
+            >
+              <Trophy className="w-3 h-3 text-rose-500" />
+              <span>ОКР</span>
+            </button>
+          )}
+        </div>
+
+        {/* Directional D-Pad & Zoom Controls */}
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {/* Directional D-Pad Buttons for discrete 1-tap panning */}
+          <div className="flex items-center gap-0.5 pr-1 border-r border-gray-200 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => handlePan(120, 0)}
+              title="Сдвиг влево"
+              className="p-1 sm:p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+            <div className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                onClick={() => handlePan(0, 100)}
+                title="Сдвиг вверх"
+                className="p-0.5 sm:p-1 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+              >
+                <ChevronUp className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePan(0, -100)}
+                title="Сдвиг вниз"
+                className="p-0.5 sm:p-1 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+              >
+                <ChevronDown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => handlePan(-120, 0)}
+              title="Сдвиг вправо"
+              className="p-1 sm:p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          </div>
+
+          {/* Zoom Buttons */}
+          <button
+            type="button"
+            onClick={() => handleZoom(0.15)}
+            title="Приблизить"
+            className="p-1 sm:p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+          >
+            <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleZoom(-0.15)}
+            title="Отдалить"
+            className="p-1 sm:p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+          >
+            <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            title="Сбросить масштаб и положение"
+            className="p-1 sm:p-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+
+          <span className="text-[10px] font-mono font-semibold px-1 text-gray-500">
+            {Math.round(scale * 100)}%
+          </span>
+
+          {/* Fullscreen / Expand Button */}
+          <div className="w-px h-4 bg-gray-200 dark:bg-gray-800 my-auto"></div>
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            title={isExpanded ? 'Свернуть' : 'Развернуть на весь экран'}
+            className="p-1.5 rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 active:scale-95 transition-all cursor-pointer"
+          >
+            {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
-      {/* Floating Legend Bar */}
+      {/* Mobile Gesture Hint Bar */}
+      {!isExpanded && (
+        <div className="absolute top-2.5 left-2.5 right-2.5 sm:right-auto sm:left-4 flex items-center justify-between gap-2 pointer-events-none z-20">
+          <div className="px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium flex items-center gap-1.5 shadow-sm">
+            <span>👆 Листайте карту пальцем или кнопками</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="pointer-events-auto sm:hidden px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer"
+          >
+            <Maximize2 className="w-3 h-3" />
+            <span>На весь экран</span>
+          </button>
+        </div>
+      )}
+
+      {/* Floating Legend Bar (Desktop) */}
       <div className="absolute top-4 left-4 hidden sm:flex items-center gap-4 px-3.5 py-2 rounded-xl bg-white/90 dark:bg-[#181B21]/90 backdrop-blur border border-[#E5E7EB] dark:border-[#262A32] text-[11px] shadow-sm z-20">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>

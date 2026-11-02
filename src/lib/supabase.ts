@@ -177,6 +177,17 @@ export async function signInWithSupabase(email: string, password: string): Promi
 }
 
 /**
+ * Helper to get the exact callback URL for OAuth redirects on any domain or subpath
+ */
+export function getOAuthRedirectUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const { origin, pathname } = window.location;
+  // Trim trailing slash to normalize
+  const cleanPath = pathname.endsWith('/') ? pathname : `${pathname}/`;
+  return `${origin}${cleanPath}`;
+}
+
+/**
  * Sign in with Google OAuth
  */
 export async function signInWithGoogleOAuth(): Promise<{ error: string | null }> {
@@ -189,7 +200,7 @@ export async function signInWithGoogleOAuth(): Promise<{ error: string | null }>
     const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin
+        redirectTo: getOAuthRedirectUrl()
       }
     });
     return { error: error ? error.message : null };
@@ -211,7 +222,7 @@ export async function signInWithAppleOAuth(): Promise<{ error: string | null }> 
     const { error } = await client.auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: window.location.origin
+        redirectTo: getOAuthRedirectUrl()
       }
     });
     return { error: error ? error.message : null };
@@ -571,6 +582,13 @@ export async function fetchAllProfilesFromDb(): Promise<User[]> {
 }
 
 /**
+ * Check if a string is a valid UUID
+ */
+export function isValidUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+/**
  * Delete a user profile and their associated progress from Supabase
  */
 export async function deleteProfileFromDb(userId: string): Promise<{ success: boolean; error: string | null }> {
@@ -579,14 +597,30 @@ export async function deleteProfileFromDb(userId: string): Promise<{ success: bo
     return { success: false, error: 'Supabase не подключен' };
   }
 
+  // If userId is not a valid UUID (e.g. mock or local id like tch-seledtsov-1),
+  // skip remote database query to prevent Postgres UUID syntax errors (code 22P02)
+  if (!isValidUuid(userId)) {
+    return { success: true, error: null };
+  }
+
   try {
-    // 1. Delete associated student progress
+    // 1. Try RPC delete first (if admin function is created in Supabase)
+    try {
+      const { data: rpcData, error: rpcError } = await client.rpc('delete_user_by_admin', { target_user_id: userId });
+      if (!rpcError && (rpcData as any)?.success !== false) {
+        return { success: true, error: null };
+      }
+    } catch {
+      // Ignore RPC failure and fallback to direct table deletion
+    }
+
+    // 2. Delete associated student progress
     await client
       .from('student_progress')
       .delete()
       .eq('user_id', userId);
 
-    // 2. Delete profile record
+    // 3. Delete profile record
     const { error } = await client
       .from('profiles')
       .delete()

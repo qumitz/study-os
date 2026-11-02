@@ -302,7 +302,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Иванов Алексей Сергеевич"
-                  className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 font-medium"
+                  className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 font-medium"
                 />
               </div>
             </div>
@@ -349,7 +349,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <select
                   value={selectedGroupId}
                   onChange={(e) => setSelectedGroupId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 appearance-none cursor-pointer"
+                  className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 appearance-none cursor-pointer"
                 >
                   {availableGroups.map(g => (
                     <option key={g.id} value={g.name}>
@@ -389,7 +389,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="student@grsu.by"
-                className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 font-medium"
+                className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 font-medium"
               />
             </div>
           </div>
@@ -407,7 +407,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={authMode === 'register' ? 'Минимум 6 символов' : 'Ваш пароль'}
-                className="w-full pl-10 pr-3.5 py-2.5 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 font-medium"
+                className="w-full pl-10 pr-3.5 py-2.5 text-base sm:text-sm rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-[#E5E7EB] dark:border-[#262A32] text-[#111827] dark:text-[#F3F3EF] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 font-medium"
               />
             </div>
           </div>

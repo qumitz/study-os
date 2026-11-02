@@ -14,13 +14,52 @@
     color-scheme: dark;
   }
 
+  html {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    position: relative;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     font-family: var(--font-inter);
     margin: 0;
     padding: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    position: relative;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    touch-action: pan-y;
   }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    min-height: 100vh;
+    position: relative;
+  }
+}
+
+/* Hide scrollbar for clean mobile swipe strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Touch-action and tap highlight utilities */
+button, a, input, select, textarea {
+  touch-action: manipulation;
 }
 
 /* Custom smooth scrollbar */
@@ -42,7 +81,96 @@
   background: rgba(156, 163, 175, 0.7);
 }
 
-/* Canvas grid pattern for Skill Tree */
+/* Document Report Table Styles */
+.word-document-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 11pt;
+  line-height: 1.5;
+  background-color: transparent;
+}
+
+.word-document-body th,
+.word-document-body td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+  min-width: 60px;
+  min-height: 36px;
+  vertical-align: top;
+  transition: background-color 0.15s ease, outline 0.15s ease;
+}
+
+.dark .word-document-body th,
+.dark .word-document-body td {
+  border-color: #475569;
+}
+
+.word-document-body th {
+  background-color: #f1f5f9;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: left;
+}
+
+.dark .word-document-body th {
+  background-color: #1e293b;
+  color: #f8fafc;
+}
+
+/* Zebra striping hover on table rows */
+.word-document-body tr:hover td {
+  background-color: rgba(59, 130, 246, 0.04);
+}
+
+.dark .word-document-body tr:hover td {
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+/* Active Cell Focus ring */
+.word-document-body td:focus,
+.word-document-body th:focus {
+  outline: 2px solid #2563eb !important;
+  outline-offset: -2px !important;
+  background-color: rgba(37, 99, 235, 0.06);
+}
+
+.dark .word-document-body td:focus,
+.dark .word-document-body th:focus {
+  outline-color: #60a5fa !important;
+  background-color: rgba(96, 165, 250, 0.1);
+}
+
+/* Table Responsive Wrapper */
+.table-responsive-wrapper {
+  position: relative;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1.25rem 0;
+  border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-responsive-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 9999px;
+}
+
+/* Canvas grid pattern and gesture lockdown for Skill Tree */
+.skill-tree-container,
+.skill-tree-container *,
+.skill-tree-grid,
+.skill-tree-grid * {
+  touch-action: none !important;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .skill-tree-grid {
   background-size: 24px 24px;
   background-image: 
