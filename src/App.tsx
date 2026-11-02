@@ -563,7 +563,7 @@ export default function App() {
               onSaveTopic={handleSaveTopic}
             />
           ) : activeTab === 'schedule' ? (
-            <ScheduleView currentUser={currentUser} />
+            <ScheduleView currentUser={currentUser} allSubjects={subjects} />
           ) : activeTab === 'labs' ? (
             <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
               <SubjectDetail

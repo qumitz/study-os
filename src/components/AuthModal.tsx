@@ -143,8 +143,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             password,
             name: name.trim(),
             role: safeRole,
-            group: groupObj.name,
-            course: groupObj.course
+            group: safeRole === 'teacher' ? 'Все группы' : groupObj.name,
+            course: safeRole === 'teacher' ? 0 : groupObj.course
           });
 
           if (error) {
@@ -174,8 +174,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       name: name.trim() || email.split('@')[0] || 'Пользователь',
       email: email,
       role: safeRole,
-      group: groupObj.name,
-      course: groupObj.course
+      group: safeRole === 'teacher' ? 'Все группы' : groupObj.name,
+      course: safeRole === 'teacher' ? 0 : groupObj.course
     };
 
     onLogin(loggedInUser);
@@ -339,8 +339,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
-          {/* Group selector */}
-          {selectedRole === 'student' && (
+          {/* Group selector - only for students */}
+          {selectedRole === 'student' ? (
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF] block">
                 Учебная группа:
@@ -353,13 +353,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 >
                   {availableGroups.map(g => (
                     <option key={g.id} value={g.name}>
-                      Группа {g.name} — 3 курс ({g.specialty.split('(')[0]})
+                      Группа {g.name} — {g.course} курс ({g.specialty.split('(')[0]})
                     </option>
                   ))}
                 </select>
                 <div className="absolute right-3.5 top-3 pointer-events-none text-gray-400 text-xs">
                   ▼
                 </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-900/40 flex items-start gap-2.5">
+              <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+                  Доступ ко всем группам колледжа
+                </p>
+                <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 leading-relaxed">
+                  Преподавателю доступны журналы всех групп. Переключаться между группами можно в любой момент прямо в журнале.
+                </p>
               </div>
             </div>
           )}

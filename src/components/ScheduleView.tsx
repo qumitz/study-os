@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -16,21 +16,22 @@ import {
   BookOpen,
   Layers
 } from 'lucide-react';
-import { ScheduleItem, User } from '../types';
+import { ScheduleItem, User, Subject } from '../types';
 
 interface ScheduleViewProps {
   currentUser?: User;
+  allSubjects?: Subject[];
 }
 
-const COLLEGE_SUBJECTS = [
-  'Системы автоматизированного проектирования',
-  'Сетевые технологии обработки информации',
-  'Техническая эксплуатация средств ВТ',
+const DEFAULT_COLLEGE_SUBJECTS = [
+  'Технические средства информатизации',
+  'Основы информационной безопасности',
   'Программирование микропроцессорных систем',
-  'Разработка мобильных приложений',
+  'Техническая эксплуатация средств ВТ',
+  'Сетевые технологии обработки информации',
   'Технологии передачи информации',
-  'Теория электрической связи',
-  'Основы информационной безопасности'
+  'Разработка мобильных приложений',
+  'Системы автоматизированного проектирования'
 ];
 
 const TIME_SLOTS = [
@@ -60,8 +61,15 @@ const COLOR_THEMES = [
   { id: 'purple', label: 'Фиолетовый', border: 'border-l-purple-500', bg: 'bg-purple-50/70 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300' }
 ];
 
-export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
+export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser, allSubjects }) => {
   const [view, setView] = useState<'week' | 'month'>('week');
+
+  const collegeSubjects = useMemo(() => {
+    if (allSubjects && allSubjects.length > 0) {
+      return allSubjects.map(s => s.title);
+    }
+    return DEFAULT_COLLEGE_SUBJECTS;
+  }, [allSubjects]);
 
   // Can the current user edit the schedule? (Teacher or Admin)
   const canEdit = currentUser?.role === 'teacher' || currentUser?.role === 'admin';
@@ -70,7 +78,17 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(() => {
     try {
       const saved = localStorage.getItem('study_os_schedule_items');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed: ScheduleItem[] = JSON.parse(saved);
+        // Clean out and fix any legacy "Теория электрической связи" -> "Технические средства информатизации"
+        return parsed.map(item => {
+          if (item.title === 'Теория электрической связи' || item.title.includes('электрической связи')) {
+            return { ...item, title: 'Технические средства информатизации' };
+          }
+          return item;
+        });
+      }
+      return [];
     } catch (e) {
       console.error('Failed to load schedule items', e);
       return [];
@@ -88,7 +106,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
 
   // Form fields
   const [formDayIndex, setFormDayIndex] = useState<number>(0);
-  const [formTitle, setFormTitle] = useState<string>(COLLEGE_SUBJECTS[0]);
+  const [formTitle, setFormTitle] = useState<string>(DEFAULT_COLLEGE_SUBJECTS[0]);
   const [formType, setFormType] = useState<string>('Лекция');
   const [formTime, setFormTime] = useState<string>('08:30 - 10:00');
   const [formRoom, setFormRoom] = useState<string>('Ауд. 312');
@@ -159,7 +177,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
   const handleOpenAddModal = (dayIndex = 0) => {
     setEditingItemId(null);
     setFormDayIndex(dayIndex);
-    setFormTitle(COLLEGE_SUBJECTS[0]);
+    setFormTitle(collegeSubjects[0] || DEFAULT_COLLEGE_SUBJECTS[0]);
     setFormType('Лекция');
     setFormTime('08:30 - 10:00');
     setFormRoom('Ауд. 312');
@@ -571,7 +589,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
                   onChange={(e) => setFormTitle(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1A1E24] text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {COLLEGE_SUBJECTS.map((subj, idx) => (
+                  {collegeSubjects.map((subj: string, idx: number) => (
                     <option key={idx} value={subj}>
                       {subj}
                     </option>

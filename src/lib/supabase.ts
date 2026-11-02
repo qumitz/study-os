@@ -83,15 +83,20 @@ export async function signUpWithSupabase(data: SignUpData): Promise<{ user: User
   }
 
   try {
+    const isAdmin = isSuperAdminEmail(data.email, data.name);
+    const safeRole: UserRole = isAdmin ? 'admin' : (data.role === 'admin' ? 'student' : data.role);
+    const safeGroup: string = safeRole === 'teacher' ? 'Все группы' : (data.group || '37В');
+    const safeCourse: number = safeRole === 'teacher' ? 0 : (data.course || 3);
+
     const { data: authData, error: authError } = await client.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
         data: {
           name: data.name,
-          role: data.role,
-          group_name: data.group,
-          course: data.course
+          role: safeRole,
+          group_name: safeGroup,
+          course: safeCourse
         }
       }
     });
@@ -104,17 +109,14 @@ export async function signUpWithSupabase(data: SignUpData): Promise<{ user: User
       return { user: null, error: 'Не удалось создать пользователя.' };
     }
 
-    const isAdmin = isSuperAdminEmail(data.email, data.name);
-    const safeRole: UserRole = isAdmin ? 'admin' : (data.role === 'admin' ? 'student' : data.role);
-
     // Upsert into profiles table
     const appUser: User = {
       id: authData.user.id,
       email: data.email,
       name: data.name,
       role: safeRole,
-      group: data.group,
-      course: data.course
+      group: safeGroup,
+      course: safeCourse
     };
 
     await upsertProfile(appUser);

@@ -5,8 +5,22 @@ export const availableGroups: CollegeGroup[] = [
     id: '37v',
     name: '37В',
     course: 3,
-    specialty: 'ПОИТ — 2-40 02 02 / ТЭСВТ 5-04-0713-01 (Лидский колледж)',
+    specialty: 'ПОИТ / ТЭСВТ (Лидский колледж)',
     subjectIds: ['secbasics', 'pms', 'tesvt', 'stoi', 'pspi', 'rmp', 'sapr', 'tsi']
+  },
+  {
+    id: '36v',
+    name: '36В',
+    course: 3,
+    specialty: 'ТЭСВТ (Лидский колледж)',
+    subjectIds: ['secbasics', 'pms', 'tesvt', 'stoi']
+  },
+  {
+    id: '35v',
+    name: '35В',
+    course: 3,
+    specialty: 'ПОИТ (Лидский колледж)',
+    subjectIds: ['secbasics', 'rmp', 'sapr', 'tsi']
   }
 ];
 

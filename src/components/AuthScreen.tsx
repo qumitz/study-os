@@ -91,8 +91,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             password,
             name: name.trim(),
             role: selectedRole,
-            group: groupObj.name,
-            course: groupObj.course
+            group: selectedRole === 'teacher' ? 'Все группы' : groupObj.name,
+            course: selectedRole === 'teacher' ? 0 : groupObj.course
           });
 
           if (error) {
@@ -119,8 +119,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       name: name.trim() || email.split('@')[0] || 'Пользователь',
       email: email,
       role: selectedRole,
-      group: groupObj.name,
-      course: groupObj.course
+      group: selectedRole === 'teacher' ? 'Все группы' : groupObj.name,
+      course: selectedRole === 'teacher' ? 0 : groupObj.course
     };
 
     onLogin(localUser);
@@ -332,29 +332,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </div>
             </div>
 
-            {/* Register specifics: Group & Role */}
+            {/* Register specifics: Role & Group */}
             {authMode === 'register' && (
               <div className="space-y-3 pt-1">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
-                    Учебная группа:
-                  </label>
-                  <select
-                    value={selectedGroupId}
-                    onChange={(e) => setSelectedGroupId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-gray-200 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                  >
-                    {availableGroups.map((g) => (
-                      <option key={g.id} value={g.name}>
-                        Группа {g.name} ({g.course} курс)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
-                    Роль:
+                    Роль в колледже:
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -383,6 +366,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {selectedRole === 'student' ? (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block">
+                      Учебная группа:
+                    </label>
+                    <select
+                      value={selectedGroupId}
+                      onChange={(e) => setSelectedGroupId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-gray-50 dark:bg-[#1A1E24] border border-gray-200 dark:border-gray-700 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    >
+                      {availableGroups.map((g) => (
+                        <option key={g.id} value={g.name}>
+                          Группа {g.name} ({g.course} курс)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-900/40 flex items-start gap-2.5">
+                    <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+                        Доступ ко всем группам колледжа
+                      </p>
+                      <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 leading-relaxed">
+                        Преподавателю доступны журналы всех групп. Переключаться между группами можно в любой момент прямо в журнале.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
