@@ -115,6 +115,16 @@ export async function extractImagesFromClipboard(
 }
 
 /**
+ * Extracts a single image from clipboard event as dataUrl
+ */
+export async function extractImageFromClipboard(
+  event: React.ClipboardEvent | ClipboardEvent
+): Promise<string | null> {
+  const images = await extractImagesFromClipboard(event);
+  return images.length > 0 ? images[0].dataUrl : null;
+}
+
+/**
  * Extracts and processes image files from file input or drag-and-drop
  */
 export async function extractImagesFromFiles(

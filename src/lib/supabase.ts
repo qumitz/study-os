@@ -104,12 +104,15 @@ export async function signUpWithSupabase(data: SignUpData): Promise<{ user: User
       return { user: null, error: 'Не удалось создать пользователя.' };
     }
 
+    const isAdmin = isSuperAdminEmail(data.email, data.name);
+    const safeRole: UserRole = isAdmin ? 'admin' : (data.role === 'admin' ? 'student' : data.role);
+
     // Upsert into profiles table
     const appUser: User = {
       id: authData.user.id,
       email: data.email,
       name: data.name,
-      role: data.role,
+      role: safeRole,
       group: data.group,
       course: data.course
     };
@@ -283,7 +286,7 @@ export async function upsertProfile(user: User): Promise<boolean> {
   if (!client) return false;
 
   const isAdmin = isSuperAdminEmail(user.email, user.name);
-  const effectiveRole = isAdmin ? 'admin' : user.role;
+  const effectiveRole = isAdmin ? 'admin' : (user.role === 'admin' ? 'student' : user.role);
 
   try {
     const { error } = await client

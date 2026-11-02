@@ -12,9 +12,11 @@ import {
   Sparkles,
   FileText
 } from 'lucide-react';
-import { Subject, Topic, TopicStatus, StudentProgress, User } from '../types';
+import { Subject, Topic, TopicStatus, StudentProgress, User, PracticalWork } from '../types';
 import { SkillTree } from './SkillTree';
 import { TopicModal } from './TopicModal';
+import { PracticalReportEditor } from './PracticalReportEditor';
+import { getStudentPracticalSubmission } from '../lib/practicalSubmissionRegistry';
 
 interface SubjectDetailProps {
   subject: Subject;

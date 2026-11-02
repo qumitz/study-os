@@ -140,7 +140,12 @@ export function updateStudentTopicGrade(
   groupName: string, 
   subjectId: string, 
   topicId: string, 
-  score: number
+  score: number,
+  topicCode?: string,
+  topicTitle?: string,
+  answers?: Record<number, number>,
+  correctCount?: number,
+  totalQuestions?: number
 ): void {
   const students = getRegisteredStudentsForGroup(groupName);
   const student = students.find(s => s.studentId === studentId);
@@ -155,12 +160,37 @@ export function updateStudentTopicGrade(
     student.topicGrades[topicId] = score;
   }
 
-  // Recalculate subject average
-  const validScores = Object.values(student.subjectGrades[subjectId]).filter(
+  // Also record on today's calendar date in dateGrades
+  const todayStr = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+  if (!student.dateGrades) student.dateGrades = {};
+  if (!student.dateGrades[subjectId]) student.dateGrades[subjectId] = {};
+  student.dateGrades[subjectId][todayStr] = score;
+
+  // Record test attempt details
+  if (!student.testAttempts) student.testAttempts = {};
+  if (!student.testAttempts[subjectId]) student.testAttempts[subjectId] = [];
+  student.testAttempts[subjectId].push({
+    topicId,
+    topicCode,
+    topicTitle,
+    score,
+    completedAt: new Date().toISOString(),
+    date: todayStr,
+    answers,
+    correctCount,
+    totalQuestions
+  });
+
+  // Recalculate subject average (counting both topic and date grades)
+  const topicScores = Object.values(student.subjectGrades[subjectId]).filter(
     (v): v is number => typeof v === 'number' && v > 0
   );
-  const subjAvg = validScores.length > 0 
-    ? Math.round((validScores.reduce((a, b) => a + b, 0) / validScores.length) * 10) / 10 
+  const dateScores = Object.values(student.dateGrades[subjectId]).filter(
+    (v): v is number => typeof v === 'number' && v > 0
+  );
+  const combinedScores = Array.from(new Set([...topicScores, ...dateScores]));
+  const subjAvg = combinedScores.length > 0 
+    ? Math.round((combinedScores.reduce((a, b) => a + b, 0) / combinedScores.length) * 10) / 10 
     : score;
 
   if (!student.subjectAverages) student.subjectAverages = {};
@@ -174,6 +204,86 @@ export function updateStudentTopicGrade(
 
   saveGroupStudents(groupName, students);
 }
+
+/**
+ * Set or update a student's grade for a specific calendar date in a subject
+ */
+export function updateStudentDateGrade(
+  studentId: string,
+  groupName: string,
+  subjectId: string,
+  dateStr: string, // 'YYYY-MM-DD'
+  grade: number | string | null
+): void {
+  const students = getRegisteredStudentsForGroup(groupName);
+  const student = students.find(s => s.studentId === studentId);
+  if (!student) return;
+
+  if (!student.dateGrades) student.dateGrades = {};
+  if (!student.dateGrades[subjectId]) student.dateGrades[subjectId] = {};
+
+  if (grade === null || grade === undefined || grade === '') {
+    delete student.dateGrades[subjectId][dateStr];
+  } else {
+    student.dateGrades[subjectId][dateStr] = grade;
+  }
+
+  // Recalculate averages based on numerical grades
+  const validNumbers = Object.values(student.dateGrades[subjectId]).filter(
+    (v): v is number => typeof v === 'number' && v > 0
+  );
+  
+  if (validNumbers.length > 0) {
+    const avg = Math.round((validNumbers.reduce((a, b) => a + b, 0) / validNumbers.length) * 10) / 10;
+    if (!student.subjectAverages) student.subjectAverages = {};
+    student.subjectAverages[subjectId] = avg;
+
+    const allAvgs = Object.values(student.subjectAverages).filter(v => v > 0);
+    student.averageScore = allAvgs.length > 0 
+      ? Math.round((allAvgs.reduce((a, b) => a + b, 0) / allAvgs.length) * 10) / 10 
+      : avg;
+  }
+
+  saveGroupStudents(groupName, students);
+}
+
+/**
+ * Helper to get date grades for a student
+ */
+export function getStudentDateGrades(
+  student: StudentGradeRecord,
+  subjectId: string
+): Record<string, number | string | null> {
+  if (student.dateGrades && student.dateGrades[subjectId]) {
+    return student.dateGrades[subjectId];
+  }
+  return {};
+}
+
+/**
+ * Academic year months: 01.09.2026 - 30.06.2027
+ */
+export interface AcademicMonth {
+  id: string; // '2026-09'
+  name: string;
+  year: number;
+  monthIndex: number; // 0-based for Date
+  semester: 1 | 2;
+  daysInMonth: number;
+}
+
+export const ACADEMIC_MONTHS: AcademicMonth[] = [
+  { id: '2026-09', name: 'Сентябрь', year: 2026, monthIndex: 8, semester: 1, daysInMonth: 30 },
+  { id: '2026-10', name: 'Октябрь', year: 2026, monthIndex: 9, semester: 1, daysInMonth: 31 },
+  { id: '2026-11', name: 'Ноябрь', year: 2026, monthIndex: 10, semester: 1, daysInMonth: 30 },
+  { id: '2026-12', name: 'Декабрь', year: 2026, monthIndex: 11, semester: 1, daysInMonth: 31 },
+  { id: '2027-01', name: 'Январь', year: 2027, monthIndex: 0, semester: 2, daysInMonth: 31 },
+  { id: '2027-02', name: 'Февраль', year: 2027, monthIndex: 1, semester: 2, daysInMonth: 28 },
+  { id: '2027-03', name: 'Март', year: 2027, monthIndex: 2, semester: 2, daysInMonth: 31 },
+  { id: '2027-04', name: 'Апрель', year: 2027, monthIndex: 3, semester: 2, daysInMonth: 30 },
+  { id: '2027-05', name: 'Май', year: 2027, monthIndex: 4, semester: 2, daysInMonth: 31 },
+  { id: '2027-06', name: 'Июнь', year: 2027, monthIndex: 5, semester: 2, daysInMonth: 30 },
+];
 
 /**
  * Remove a student completely from group registry
