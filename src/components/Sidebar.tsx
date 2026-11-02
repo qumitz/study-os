@@ -10,8 +10,9 @@ import {
   Shield
 } from 'lucide-react';
 import { User } from '../types';
+import { isSuperAdminEmail } from '../lib/supabase';
 
-export type NavTab = 'dashboard' | 'subjects' | 'schedule' | 'tasks' | 'tests' | 'labs' | 'achievements' | 'settings' | 'teacher';
+export type NavTab = 'dashboard' | 'subjects' | 'schedule' | 'tasks' | 'tests' | 'labs' | 'achievements' | 'settings' | 'teacher' | 'admin';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -28,9 +29,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   groupName = '37В',
   course = 3
 }) => {
+  const isAdmin = currentUser?.role === 'admin' || isSuperAdminEmail(currentUser?.email, currentUser?.name);
+
   const navItems = [
     { id: 'dashboard' as NavTab, label: 'Главная', icon: Home },
     ...(currentUser?.role === 'teacher' || currentUser?.role === 'admin' ? [{ id: 'teacher' as NavTab, label: 'Журнал 37В', icon: Users }] : []),
+    ...(isAdmin ? [{ id: 'admin' as NavTab, label: 'Управление', icon: Shield }] : []),
     { id: 'subjects' as NavTab, label: 'Предметы', icon: Layers },
     { id: 'schedule' as NavTab, label: 'Расписание', icon: Calendar },
     { id: 'tests' as NavTab, label: 'Тесты и ОКР', icon: CheckSquare },

@@ -96,6 +96,16 @@ export interface CollegeGroup {
   subjectIds: string[];
 }
 
+export interface TeacherRecord {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  subjects: string[]; // subject IDs or titles
+  phone?: string;
+  room?: string;
+}
+
 export interface StudentGradeRecord {
   studentId: string;
   studentName: string;

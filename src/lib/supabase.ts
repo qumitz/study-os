@@ -527,3 +527,116 @@ export async function fetchGroupStudentsFromDb(groupName: string, subjectId: str
     return null;
   }
 }
+
+/* =========================================================================
+   ADMINISTRATION APIS
+   ========================================================================= */
+
+/**
+ * Fetch all registered user profiles across the entire college system
+ */
+export async function fetchAllProfilesFromDb(): Promise<User[]> {
+  const client = getSupabaseClient();
+  if (!client) return [];
+
+  try {
+    const { data, error } = await client
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((d: any) => {
+      const isAdmin = isSuperAdminEmail(d.email, d.name);
+      return {
+        id: d.id,
+        name: d.name,
+        email: d.email,
+        role: isAdmin ? 'admin' : ((d.role as UserRole) || 'student'),
+        group: d.group_name || '37В',
+        course: d.course || 3,
+        avatar: d.avatar_url
+      };
+    });
+  } catch (err) {
+    console.warn('Failed to fetch all profiles from Supabase:', err);
+    return [];
+  }
+}
+
+/**
+ * Delete a user profile and their associated progress from Supabase
+ */
+export async function deleteProfileFromDb(userId: string): Promise<{ success: boolean; error: string | null }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, error: 'Supabase не подключен' };
+  }
+
+  try {
+    // 1. Delete associated student progress
+    await client
+      .from('student_progress')
+      .delete()
+      .eq('user_id', userId);
+
+    // 2. Delete profile record
+    const { error } = await client
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
+
+    if (error) {
+      console.warn('Error deleting profile from Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Exception deleting profile:', err);
+    return { success: false, error: err.message || 'Ошибка удаления' };
+  }
+}
+
+/**
+ * Create or register a teacher profile in Supabase
+ */
+export async function createTeacherProfileInDb(teacher: {
+  id?: string;
+  name: string;
+  email: string;
+  group?: string;
+  course?: number;
+}): Promise<User | null> {
+  const client = getSupabaseClient();
+  const teacherId = teacher.id || `tch-${Date.now()}`;
+  const teacherUser: User = {
+    id: teacherId,
+    name: teacher.name,
+    email: teacher.email,
+    role: 'teacher',
+    group: teacher.group || '37В',
+    course: teacher.course || 3
+  };
+
+  if (client) {
+    try {
+      await client
+        .from('profiles')
+        .upsert({
+          id: teacherId,
+          email: teacher.email,
+          name: teacher.name,
+          role: 'teacher',
+          group_name: teacher.group || '37В',
+          course: teacher.course || 3,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+    } catch (e) {
+      console.warn('Could not save teacher to Supabase, saved locally:', e);
+    }
+  }
+
+  return teacherUser;
+}

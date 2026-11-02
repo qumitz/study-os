@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { SubjectDetail } from './components/SubjectDetail';
 import { ScheduleView } from './components/ScheduleView';
 import { TeacherDashboard } from './components/TeacherDashboard';
+import { AdminPanel } from './components/AdminPanel';
 import { AuthModal } from './components/AuthModal';
 import { AuthScreen } from './components/AuthScreen';
 import { OnboardingModal } from './components/OnboardingModal';
 import { SettingsView } from './components/SettingsView';
 import { MobileNav } from './components/MobileNav';
 import { allSubjects, getSubjectById, defaultSubjectId } from './data/allSubjects';
-import { StudentProgress, TopicStatus, User, UserRole, Topic, Subject, ThemeMode } from './types';
+import { StudentProgress, TopicStatus, User, UserRole, Topic, Subject, ThemeMode, ScheduleItem } from './types';
 import { 
   getSupabaseClient, 
   isSupabaseConfigured, 
@@ -140,6 +141,56 @@ export default function App() {
     return saved || defaultSubjectId;
   });
 
+  // Admin custom subjects state (stored in localStorage)
+  const [customSubjects, setCustomSubjects] = useState<Subject[]>(() => {
+    try {
+      const saved = localStorage.getItem('study_os_custom_subjects');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error('Failed to parse custom subjects', e);
+      return [];
+    }
+  });
+
+  // Combined subjects: official college subjects + custom admin subjects
+  const subjects = useMemo(() => {
+    return [...allSubjects, ...customSubjects];
+  }, [customSubjects]);
+
+  // Schedule items state
+  const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('study_os_schedule_items');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const handleUpdateSchedule = (newItems: ScheduleItem[]) => {
+    setScheduleItems(newItems);
+    localStorage.setItem('study_os_schedule_items', JSON.stringify(newItems));
+  };
+
+  const handleAddSubject = (newSubject: Subject) => {
+    setCustomSubjects((prev) => {
+      const updated = [...prev, newSubject];
+      localStorage.setItem('study_os_custom_subjects', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDeleteSubject = (subjectId: string) => {
+    setCustomSubjects((prev) => {
+      const updated = prev.filter((s) => s.id !== subjectId);
+      localStorage.setItem('study_os_custom_subjects', JSON.stringify(updated));
+      return updated;
+    });
+    if (activeSubjectId === subjectId) {
+      setActiveSubjectId(allSubjects[0]?.id || defaultSubjectId);
+    }
+  };
+
   // Admin custom topics state (per-subject)
   const [customSubjectTopics, setCustomSubjectTopics] = useState<Record<string, Topic[]>>(() => {
     const result: Record<string, Topic[]> = {};
@@ -173,7 +224,7 @@ export default function App() {
   // Helper to build initial pristine progress per subject
   const buildDefaultProgress = (): Record<string, StudentProgress> => {
     const result: Record<string, StudentProgress> = {};
-    allSubjects.forEach((subj) => {
+    subjects.forEach((subj) => {
       const initialStatuses: Record<string, TopicStatus> = {};
       subj.topics.forEach((t, idx) => {
         if (idx === 0 || t.id.includes('intro') || t.prerequisites.length === 0) {
@@ -196,7 +247,7 @@ export default function App() {
     if (!userId) return defaultProg;
 
     const result: Record<string, StudentProgress> = {};
-    allSubjects.forEach((subj) => {
+    subjects.forEach((subj) => {
       const key = `study_os_progress_${userId}_${subj.id}`;
       const saved = localStorage.getItem(key);
       if (saved) {
@@ -207,7 +258,7 @@ export default function App() {
           console.error('Failed to parse progress for', subj.id, e);
         }
       }
-      result[subj.id] = defaultProg[subj.id];
+      result[subj.id] = defaultProg[subj.id] || { topicStatuses: {}, grades: {} };
     });
     return result;
   };
@@ -234,7 +285,7 @@ export default function App() {
         if (cloudProgress && Object.keys(cloudProgress).length > 0) {
           setAllProgress((prev) => {
             const merged = { ...prev };
-            allSubjects.forEach((subj) => {
+            subjects.forEach((subj) => {
               if (cloudProgress[subj.id] && Object.keys(cloudProgress[subj.id].topicStatuses).length > 0) {
                 merged[subj.id] = cloudProgress[subj.id];
                 localStorage.setItem(`study_os_progress_${currentUser.id}_${subj.id}`, JSON.stringify(cloudProgress[subj.id]));
@@ -245,10 +296,10 @@ export default function App() {
         }
       });
     }
-  }, [currentUser.id]);
+  }, [currentUser.id, subjects]);
 
   // Current active subject model with any admin overrides applied
-  const baseSubject = getSubjectById(activeSubjectId);
+  const baseSubject = subjects.find(s => s.id === activeSubjectId) || getSubjectById(activeSubjectId) || subjects[0] || allSubjects[0];
   const currentSubject: Subject = {
     ...baseSubject,
     topics: customSubjectTopics[baseSubject.id] || baseSubject.topics
@@ -358,6 +409,9 @@ export default function App() {
     if (role === 'teacher') {
       setActiveTab('teacher');
       setInSubjectView(false);
+    } else if (role === 'admin') {
+      setActiveTab('admin');
+      setInSubjectView(false);
     } else {
       setActiveTab('dashboard');
       setInSubjectView(false);
@@ -373,6 +427,8 @@ export default function App() {
     }
     if (user.role === 'teacher') {
       setActiveTab('teacher');
+    } else if (user.role === 'admin') {
+      setActiveTab('admin');
     } else {
       setActiveTab('dashboard');
     }
@@ -459,11 +515,24 @@ export default function App() {
         />
 
         <main className="flex-1 overflow-y-auto">
-          {activeTab === 'teacher' || (currentUser.role === 'teacher' && !inSubjectView && activeTab === 'dashboard') ? (
+          {activeTab === 'admin' ? (
+            <AdminPanel
+              currentUser={currentUser}
+              allSubjects={subjects}
+              onAddSubject={handleAddSubject}
+              onDeleteSubject={handleDeleteSubject}
+              scheduleItems={scheduleItems}
+              onUpdateSchedule={handleUpdateSchedule}
+              onSwitchTab={(tab) => {
+                setActiveTab(tab as NavTab);
+                if (tab === 'subjects') setInSubjectView(true);
+              }}
+            />
+          ) : activeTab === 'teacher' || (currentUser.role === 'teacher' && !inSubjectView && activeTab === 'dashboard') ? (
             <TeacherDashboard
               subject={currentSubject}
               currentUserGroup={currentUser.group}
-              allSubjects={allSubjects}
+              allSubjects={subjects}
               onSelectSubject={handleSelectSubject}
             />
           ) : inSubjectView || activeTab === 'subjects' ? (
@@ -471,11 +540,11 @@ export default function App() {
               subject={currentSubject}
               progress={currentProgress}
               currentUser={currentUser}
-              allSubjects={allSubjects}
+              allSubjects={subjects}
               onSelectSubject={handleSelectSubject}
               onBack={() => {
                 setInSubjectView(false);
-                setActiveTab(currentUser.role === 'teacher' ? 'teacher' : 'dashboard');
+                setActiveTab(currentUser.role === 'teacher' ? 'teacher' : currentUser.role === 'admin' ? 'admin' : 'dashboard');
               }}
               onUpdateProgress={handleUpdateProgress}
               onSaveTopic={handleSaveTopic}
@@ -488,9 +557,9 @@ export default function App() {
                 subject={currentSubject}
                 progress={currentProgress}
                 currentUser={currentUser}
-                allSubjects={allSubjects}
+                allSubjects={subjects}
                 onSelectSubject={handleSelectSubject}
-                onBack={() => setActiveTab(currentUser.role === 'teacher' ? 'teacher' : 'dashboard')}
+                onBack={() => setActiveTab(currentUser.role === 'teacher' ? 'teacher' : currentUser.role === 'admin' ? 'admin' : 'dashboard')}
                 onUpdateProgress={handleUpdateProgress}
                 onSaveTopic={handleSaveTopic}
               />
@@ -507,7 +576,7 @@ export default function App() {
             />
           ) : (
             <Dashboard
-              subjects={allSubjects}
+              subjects={subjects}
               allProgress={allProgress}
               currentUser={currentUser}
               onSelectSubject={handleSelectSubject}

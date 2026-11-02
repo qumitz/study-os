@@ -174,3 +174,13 @@ export function updateStudentTopicGrade(
 
   saveGroupStudents(groupName, students);
 }
+
+/**
+ * Remove a student completely from group registry
+ */
+export function removeStudentFromRegistry(studentId: string, groupName: string = '37В'): void {
+  const students = getRegisteredStudentsForGroup(groupName);
+  const updated = students.filter(s => s.studentId !== studentId);
+  saveGroupStudents(groupName, updated);
+}
+
