@@ -90,6 +90,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           {/* Rows actions */}
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddRowBelow}
             className="flex items-center gap-1 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] border border-blue-200 dark:border-blue-900 text-xs font-semibold shrink-0 active:scale-95 cursor-pointer"
           >
@@ -98,6 +99,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddRowAbove}
             className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-medium shrink-0 active:scale-95 cursor-pointer"
           >
@@ -106,6 +108,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteRow}
             className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-rose-600 dark:text-rose-400 text-xs font-medium shrink-0 active:scale-95 cursor-pointer"
           >
@@ -118,6 +121,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           {/* Columns actions */}
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddColRight}
             className="flex items-center gap-1 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900 text-xs font-semibold shrink-0 active:scale-95 cursor-pointer"
           >
@@ -126,6 +130,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddColLeft}
             className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-medium shrink-0 active:scale-95 cursor-pointer"
           >
@@ -134,6 +139,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteCol}
             className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-rose-600 dark:text-rose-400 text-xs font-medium shrink-0 active:scale-95 cursor-pointer"
           >
@@ -146,6 +152,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           {/* Style & Alignment */}
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onToggleHeader}
             className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-medium shrink-0 active:scale-95 cursor-pointer"
           >
@@ -154,6 +161,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onAlignCol('center')}
             className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs shrink-0 active:scale-95 cursor-pointer"
             title="По центру в столбце"
@@ -176,6 +184,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddRowBelow}
             className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 font-semibold transition-colors cursor-pointer"
             title="Добавить строку снизу (также работает клавиша Tab в последней ячейке)"
@@ -185,6 +194,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddRowAbove}
             className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
             title="Добавить строку сверху"
@@ -193,6 +203,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteRow}
             className="p-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
             title="Удалить текущую строку"
@@ -207,6 +218,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddColRight}
             className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 font-semibold transition-colors cursor-pointer"
             title="Добавить столбец справа"
@@ -216,6 +228,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onAddColLeft}
             className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
             title="Добавить столбец слева"
@@ -224,6 +237,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteCol}
             className="p-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
             title="Удалить текущий столбец"
@@ -238,24 +252,27 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onAlignCol('left')}
-            className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title="По левому краю"
           >
             <AlignLeft className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onAlignCol('center')}
-            className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title="По центру"
           >
             <AlignCenter className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onAlignCol('right')}
-            className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             title="По правому краю"
           >
             <AlignRight className="w-3.5 h-3.5" />
@@ -263,6 +280,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
 
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onToggleHeader}
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
             title="Сделать текущую строку шапкой"
@@ -278,6 +296,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={onDeleteTable}
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer font-medium"
             title="Удалить таблицу целиком"
@@ -288,7 +307,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
             title="Закрыть панель управления таблицей"
           >
             <X className="w-3.5 h-3.5" />

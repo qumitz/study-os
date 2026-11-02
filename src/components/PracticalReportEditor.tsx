@@ -34,6 +34,8 @@ import {
   savePracticalSubmission 
 } from '../lib/practicalSubmissionRegistry';
 import { compressImage, extractImageFromClipboard } from '../lib/imageUtils';
+import { TableInsertModal } from './TableInsertModal';
+import { TableContextMenu, ActiveTableInfo } from './TableContextMenu';
 
 interface PracticalReportEditorProps {
   work: PracticalWork;
@@ -72,6 +74,8 @@ export const PracticalReportEditor: React.FC<PracticalReportEditorProps> = ({
   const [fontFamily, setFontFamily] = useState<string>('Times New Roman, serif');
   const [fontSize, setFontSize] = useState<string>('14pt');
   const [wordCount, setWordCount] = useState<number>(0);
+  const [showTableModal, setShowTableModal] = useState<boolean>(false);
+  const [activeTableInfo, setActiveTableInfo] = useState<ActiveTableInfo | null>(null);
 
   // Generate standard College Title Block HTML
   const generateTitleBlockHtml = () => {
@@ -188,36 +192,334 @@ export const PracticalReportEditor: React.FC<PracticalReportEditorProps> = ({
     }
   };
 
-  // Insert Table
-  const insertTable = () => {
-    const tableHtml = `
-      <table style="width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 11pt;">
-        <thead>
-          <tr style="background-color: #f1f5f9;">
-            <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left;">№ п/п</th>
-            <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left;">Параметр / Узел</th>
-            <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left;">Значение / Результат</th>
-            <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left;">Примечание</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;">1</td>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
-          </tr>
-          <tr>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;">2</td>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
-            <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-    `;
-    executeCmd('insertHTML', tableHtml);
+  // Detect active table & cell whenever user clicks, types, or moves cursor
+  const updateActiveTable = (targetElement?: EventTarget | null) => {
+    let cell: HTMLTableCellElement | null = null;
+    if (targetElement && targetElement instanceof HTMLElement) {
+      cell = targetElement.closest('td, th');
+    }
+    if (!cell) {
+      const sel = window.getSelection();
+      if (sel && sel.anchorNode && editorRef.current) {
+        const node = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode as HTMLElement;
+        cell = node?.closest('td, th') as HTMLTableCellElement | null;
+      }
+    }
+    if (!cell && document.activeElement instanceof HTMLElement) {
+      cell = document.activeElement.closest('td, th');
+    }
+
+    if (cell && editorRef.current?.contains(cell)) {
+      const tr = cell.closest('tr') as HTMLTableRowElement | null;
+      const table = cell.closest('table') as HTMLTableElement | null;
+      if (tr && table) {
+        setActiveTableInfo({
+          table,
+          cell,
+          tr,
+          rowIndex: tr.rowIndex,
+          colIndex: cell.cellIndex,
+          totalRows: table.rows.length,
+          totalCols: tr.cells.length,
+          isHeader: cell.tagName.toLowerCase() === 'th' || tr.rowIndex === 0
+        });
+        return;
+      }
+    }
+    setActiveTableInfo(null);
+  };
+
+  // Insert Table from Modal
+  const handleInsertCustomTable = (tableHtml: string) => {
+    setShowTableModal(false);
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+
+    // Try standard execCommand first
+    const success = document.execCommand('insertHTML', false, tableHtml);
+    if (!success) {
+      // Fallback: append to editor
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = tableHtml;
+      while (tempDiv.firstChild) {
+        editorRef.current.appendChild(tempDiv.firstChild);
+      }
+    }
+
+    updateWordCount();
+    setTimeout(() => {
+      const tables = editorRef.current?.querySelectorAll('table');
+      if (tables && tables.length > 0) {
+        const lastTable = tables[tables.length - 1];
+        const firstCell = lastTable.querySelector('tbody td') || lastTable.querySelector('td, th');
+        if (firstCell instanceof HTMLElement) {
+          firstCell.focus();
+          updateActiveTable(firstCell);
+        }
+      }
+    }, 60);
+  };
+
+  // Add row below
+  const handleAddRowBelow = () => {
+    if (!activeTableInfo) return;
+    const { table, tr } = activeTableInfo;
+    const newRow = table.insertRow(tr.rowIndex + 1);
+    const colCount = tr.cells.length;
+    for (let i = 0; i < colCount; i++) {
+      const cell = newRow.insertCell(i);
+      cell.style.border = '1px solid #cbd5e1';
+      cell.style.padding = '8px 12px';
+      cell.style.minWidth = '60px';
+      cell.style.minHeight = '36px';
+      // Auto-number first column if previous row had number
+      const prevFirstCellText = tr.cells[0]?.innerText.trim() || '';
+      const prevNum = parseInt(prevFirstCellText, 10);
+      if (i === 0 && !isNaN(prevNum)) {
+        cell.innerText = `${prevNum + 1}`;
+      } else {
+        cell.innerHTML = '<br>';
+      }
+    }
+    const targetCell = newRow.cells[0];
+    targetCell?.focus();
+    updateActiveTable(targetCell);
+    updateWordCount();
+  };
+
+  // Add row above
+  const handleAddRowAbove = () => {
+    if (!activeTableInfo) return;
+    const { table, tr } = activeTableInfo;
+    const newRow = table.insertRow(tr.rowIndex);
+    const colCount = tr.cells.length;
+    for (let i = 0; i < colCount; i++) {
+      const cell = newRow.insertCell(i);
+      cell.style.border = '1px solid #cbd5e1';
+      cell.style.padding = '8px 12px';
+      cell.style.minWidth = '60px';
+      cell.style.minHeight = '36px';
+      cell.innerHTML = '<br>';
+    }
+    const targetCell = newRow.cells[0];
+    targetCell?.focus();
+    updateActiveTable(targetCell);
+    updateWordCount();
+  };
+
+  // Delete row
+  const handleDeleteRow = () => {
+    if (!activeTableInfo) return;
+    const { table, tr } = activeTableInfo;
+    if (table.rows.length <= 1) {
+      const wrapper = table.closest('.table-responsive-wrapper') || table;
+      wrapper.remove();
+      setActiveTableInfo(null);
+    } else {
+      const nextIndex = Math.min(tr.rowIndex, table.rows.length - 2);
+      table.deleteRow(tr.rowIndex);
+      const focusRow = table.rows[nextIndex];
+      const targetCell = focusRow?.cells[0];
+      targetCell?.focus();
+      updateActiveTable(targetCell);
+    }
+    updateWordCount();
+  };
+
+  // Add column right
+  const handleAddColRight = () => {
+    if (!activeTableInfo) return;
+    const { table, colIndex, tr } = activeTableInfo;
+    for (let r = 0; r < table.rows.length; r++) {
+      const row = table.rows[r];
+      const targetCell = row.cells[colIndex];
+      const isHeader = targetCell?.tagName.toLowerCase() === 'th';
+      const newCell = document.createElement(isHeader ? 'th' : 'td');
+      newCell.style.border = '1px solid #cbd5e1';
+      newCell.style.padding = '8px 12px';
+      newCell.style.minWidth = '60px';
+      newCell.style.minHeight = '36px';
+      if (isHeader) {
+        newCell.style.fontWeight = 'bold';
+        newCell.style.textAlign = 'left';
+        newCell.innerText = `Колонка ${row.cells.length + 1}`;
+      } else {
+        newCell.innerHTML = '<br>';
+      }
+      if (targetCell && targetCell.nextSibling) {
+        row.insertBefore(newCell, targetCell.nextSibling);
+      } else {
+        row.appendChild(newCell);
+      }
+    }
+    const focusCell = table.rows[tr.rowIndex]?.cells[colIndex + 1];
+    focusCell?.focus();
+    updateActiveTable(focusCell);
+    updateWordCount();
+  };
+
+  // Add column left
+  const handleAddColLeft = () => {
+    if (!activeTableInfo) return;
+    const { table, colIndex, tr } = activeTableInfo;
+    for (let r = 0; r < table.rows.length; r++) {
+      const row = table.rows[r];
+      const targetCell = row.cells[colIndex];
+      const isHeader = targetCell?.tagName.toLowerCase() === 'th';
+      const newCell = document.createElement(isHeader ? 'th' : 'td');
+      newCell.style.border = '1px solid #cbd5e1';
+      newCell.style.padding = '8px 12px';
+      newCell.style.minWidth = '60px';
+      newCell.style.minHeight = '36px';
+      if (isHeader) {
+        newCell.style.fontWeight = 'bold';
+        newCell.style.textAlign = 'left';
+        newCell.innerText = `Колонка ${colIndex + 1}`;
+      } else {
+        newCell.innerHTML = '<br>';
+      }
+      if (targetCell) {
+        row.insertBefore(newCell, targetCell);
+      } else {
+        row.appendChild(newCell);
+      }
+    }
+    const focusCell = table.rows[tr.rowIndex]?.cells[colIndex];
+    focusCell?.focus();
+    updateActiveTable(focusCell);
+    updateWordCount();
+  };
+
+  // Delete column
+  const handleDeleteCol = () => {
+    if (!activeTableInfo) return;
+    const { table, colIndex, tr } = activeTableInfo;
+    if (tr.cells.length <= 1) {
+      const wrapper = table.closest('.table-responsive-wrapper') || table;
+      wrapper.remove();
+      setActiveTableInfo(null);
+    } else {
+      for (let r = 0; r < table.rows.length; r++) {
+        if (table.rows[r].cells[colIndex]) {
+          table.rows[r].deleteCell(colIndex);
+        }
+      }
+      const nextCol = Math.min(colIndex, (table.rows[tr.rowIndex]?.cells.length || 1) - 1);
+      const focusCell = table.rows[tr.rowIndex]?.cells[nextCol];
+      focusCell?.focus();
+      updateActiveTable(focusCell);
+    }
+    updateWordCount();
+  };
+
+  // Toggle header
+  const handleToggleHeader = () => {
+    if (!activeTableInfo) return;
+    const { tr } = activeTableInfo;
+    const isCurrentlyTh = tr.cells[0]?.tagName.toLowerCase() === 'th';
+    const newTagName = isCurrentlyTh ? 'td' : 'th';
+    const cellsArray = Array.from(tr.cells);
+    cellsArray.forEach(cell => {
+      const newCell = document.createElement(newTagName);
+      newCell.innerHTML = cell.innerHTML;
+      newCell.style.border = '1px solid #cbd5e1';
+      newCell.style.padding = '8px 12px';
+      newCell.style.minWidth = '60px';
+      newCell.style.minHeight = '36px';
+      if (!isCurrentlyTh) {
+        newCell.style.fontWeight = 'bold';
+      } else {
+        newCell.style.fontWeight = 'normal';
+      }
+      tr.replaceChild(newCell, cell);
+    });
+    updateActiveTable();
+  };
+
+  // Align column
+  const handleAlignCol = (align: 'left' | 'center' | 'right') => {
+    if (!activeTableInfo) return;
+    const { table, colIndex } = activeTableInfo;
+    for (let r = 0; r < table.rows.length; r++) {
+      const cell = table.rows[r].cells[colIndex];
+      if (cell) {
+        cell.style.textAlign = align;
+      }
+    }
+  };
+
+  // Delete table
+  const handleDeleteTable = () => {
+    if (!activeTableInfo) return;
+    if (window.confirm('Удалить эту таблицу целиком?')) {
+      const wrapper = activeTableInfo.table.closest('.table-responsive-wrapper') || activeTableInfo.table;
+      wrapper.remove();
+      setActiveTableInfo(null);
+      updateWordCount();
+    }
+  };
+
+  // Handle Tab key inside table for Word-like auto-addition
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Tab') {
+      const sel = window.getSelection();
+      const node = sel?.anchorNode?.nodeType === 3 
+        ? sel.anchorNode.parentElement 
+        : sel?.anchorNode as HTMLElement | null;
+      const cell = node?.closest('td, th') as HTMLTableCellElement | null;
+      
+      if (cell && editorRef.current?.contains(cell)) {
+        e.preventDefault();
+        const tr = cell.closest('tr');
+        const table = cell.closest('table');
+        if (tr && table) {
+          if (!e.shiftKey) {
+            // Tab forward
+            const isLastCellInRow = cell.cellIndex === tr.cells.length - 1;
+            const isLastRow = tr.rowIndex === table.rows.length - 1;
+            if (isLastCellInRow && isLastRow) {
+              // Word-like auto-addition of new row at table end!
+              const newRow = table.insertRow(tr.rowIndex + 1);
+              const colCount = tr.cells.length;
+              for (let i = 0; i < colCount; i++) {
+                const c = newRow.insertCell(i);
+                c.style.border = '1px solid #cbd5e1';
+                c.style.padding = '8px 12px';
+                c.style.minWidth = '60px';
+                c.style.minHeight = '36px';
+                const prevFirst = tr.cells[0]?.innerText.trim() || '';
+                const num = parseInt(prevFirst, 10);
+                if (i === 0 && !isNaN(num)) {
+                  c.innerText = `${num + 1}`;
+                } else {
+                  c.innerHTML = '<br>';
+                }
+              }
+              updateActiveTable();
+              updateWordCount();
+              newRow.cells[0]?.focus();
+            } else if (isLastCellInRow) {
+              const nextRow = table.rows[tr.rowIndex + 1];
+              nextRow?.cells[0]?.focus();
+              updateActiveTable();
+            } else {
+              tr.cells[cell.cellIndex + 1]?.focus();
+              updateActiveTable();
+            }
+          } else {
+            // Shift+Tab backward
+            if (cell.cellIndex > 0) {
+              tr.cells[cell.cellIndex - 1]?.focus();
+              updateActiveTable();
+            } else if (tr.rowIndex > 0) {
+              const prevRow = table.rows[tr.rowIndex - 1];
+              prevRow?.cells[prevRow.cells.length - 1]?.focus();
+              updateActiveTable();
+            }
+          }
+        }
+      }
+    }
   };
 
   // Insert Code Snippet Block
@@ -600,9 +902,9 @@ console.log("Практическая работа выполнена");</code><
 
           <button
             type="button"
-            onClick={insertTable}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-300"
-            title="Вставить таблицу данных"
+            onClick={() => setShowTableModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50/80 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900/60 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-xs font-semibold text-[#2563EB] dark:text-[#60A5FA] transition-colors cursor-pointer"
+            title="Вставить таблицу (настраиваемая сетка или готовые шаблоны для отчёта)"
           >
             <TableIcon className="w-3.5 h-3.5" />
             <span>Таблица</span>
@@ -683,10 +985,27 @@ console.log("Практическая работа выполнена");</code><
 
         {/* Center: A4 Paper Sheet Canvas */}
         <main 
-          className="flex-1 overflow-y-auto p-2 sm:p-6 md:p-8 flex justify-center bg-[#EAECEF] dark:bg-[#0D0F14]"
+          className="flex-1 overflow-y-auto p-2 sm:p-6 md:p-8 flex flex-col items-center bg-[#EAECEF] dark:bg-[#0D0F14] relative"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
         >
+          {/* Active Table Context Menu Bar (Floating on Desktop + Sticky Bottom on Mobile) */}
+          {activeTableInfo && (
+            <TableContextMenu
+              info={activeTableInfo}
+              onAddRowBelow={handleAddRowBelow}
+              onAddRowAbove={handleAddRowAbove}
+              onDeleteRow={handleDeleteRow}
+              onAddColRight={handleAddColRight}
+              onAddColLeft={handleAddColLeft}
+              onDeleteCol={handleDeleteCol}
+              onToggleHeader={handleToggleHeader}
+              onAlignCol={handleAlignCol}
+              onDeleteTable={handleDeleteTable}
+              onClose={() => setActiveTableInfo(null)}
+            />
+          )}
+
           <div className="w-full max-w-[850px] space-y-4">
             {/* Teacher Feedback Alert Banner if already reviewed */}
             {submission && submission.status === 'graded' && (
@@ -737,8 +1056,18 @@ console.log("Практическая работа выполнена");</code><
                 ref={editorRef}
                 contentEditable={status !== 'graded'}
                 onPaste={handlePaste}
-                onInput={updateWordCount}
-                onBlur={() => handleSaveDraft(true)}
+                onInput={() => {
+                  updateWordCount();
+                  updateActiveTable();
+                }}
+                onKeyDown={handleKeyDown}
+                onClick={(e) => updateActiveTable(e.target)}
+                onTouchEnd={(e) => updateActiveTable(e.target)}
+                onKeyUp={(e) => updateActiveTable(e.target)}
+                onFocus={(e) => updateActiveTable(e.target)}
+                onBlur={() => {
+                  handleSaveDraft(true);
+                }}
                 className="outline-none min-h-[420px] sm:min-h-[900px] text-gray-900 dark:text-gray-100 leading-relaxed word-document-body"
                 style={{
                   lineHeight: '1.65'
@@ -754,6 +1083,13 @@ console.log("Практическая работа выполнена");</code><
           </div>
         </main>
       </div>
+
+      {/* Table Insert Modal */}
+      <TableInsertModal
+        isOpen={showTableModal}
+        onClose={() => setShowTableModal(false)}
+        onInsertTable={handleInsertCustomTable}
+      />
     </div>
   );
 };

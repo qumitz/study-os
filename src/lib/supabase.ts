@@ -7,18 +7,26 @@ const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_tQFkeJhvqBjuhXqPdMaGdg_I7MeGg2
 
 // Read config from Vite env variables, localStorage override, or default project credentials
 export const getSupabaseCredentials = () => {
-  const envUrl = import.meta.env.VITE_SUPABASE_URL;
-  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const localUrl = localStorage.getItem('study_os_supabase_url');
-  const localKey = localStorage.getItem('study_os_supabase_key');
+  const envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  let localUrl = '';
+  let localKey = '';
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localUrl = (localStorage.getItem('study_os_supabase_url') || '').trim();
+      localKey = (localStorage.getItem('study_os_supabase_key') || '').trim();
+    }
+  } catch {
+    // Ignore localStorage access errors
+  }
 
-  const url = (envUrl && envUrl !== 'https://your-project.supabase.co') 
+  const url = (envUrl && envUrl.startsWith('http') && envUrl !== 'https://your-project.supabase.co') 
     ? envUrl 
-    : (localUrl || DEFAULT_SUPABASE_URL);
+    : (localUrl && localUrl.startsWith('http') ? localUrl : DEFAULT_SUPABASE_URL);
 
-  const key = (envKey && envKey !== 'your-anon-key') 
+  const key = (envKey && envKey.length > 10 && envKey !== 'your-anon-key') 
     ? envKey 
-    : (localKey || DEFAULT_SUPABASE_ANON_KEY);
+    : (localKey && localKey.length > 10 ? localKey : DEFAULT_SUPABASE_ANON_KEY);
 
   return { url: url.trim(), key: key.trim() };
 };

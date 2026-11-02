@@ -1,0 +1,26 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Runs every 3 days at 06:00 UTC to keep the Supabase database awake
+    - cron: '0 6 */3 * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  ping:
+    name: Ping Supabase Database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          echo "Pinging Supabase study-os database to reset 7-day inactivity pause timer..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: sb_publishable_tQFkeJhvqBjuhXqPdMaGdg_I7MeGg2g" \
+            -H "Authorization: Bearer sb_publishable_tQFkeJhvqBjuhXqPdMaGdg_I7MeGg2g" \
+            "https://poxzqzsralyqydbgazoy.supabase.co/rest/v1/profiles?select=id&limit=1")
+          echo "Response HTTP Status: $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+            echo "Successfully pinged Supabase! Inactivity timer has been reset."
+          else
+            echo "Warning: Received status $STATUS"
+          fi

@@ -110,10 +110,10 @@ export const TableInsertModal: React.FC<TableInsertModalProps> = ({
     html += `<table style="width: 100%; min-width: 100%; border-collapse: collapse; font-size: 11pt; border: 1px solid #cbd5e1;">`;
     
     if (useHeader) {
-      html += `<thead><tr style="background-color: #f1f5f9;">`;
+      html += `<thead><tr>`;
       for (let c = 0; c < colCount; c++) {
         const headerText = headerList && headerList[c] ? headerList[c] : (c === 0 ? '№ п/п' : `Колонка ${c + 1}`);
-        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; font-weight: bold; text-align: left; background-color: #f1f5f9;">${headerText}</th>`;
+        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; font-weight: bold; text-align: left;">${headerText}</th>`;
       }
       html += `</tr></thead>`;
     }

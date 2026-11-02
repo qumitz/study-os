@@ -108,14 +108,28 @@ button, a, input, select, textarea {
 
 .word-document-body th {
   background-color: #f1f5f9;
+  color: #0f172a !important;
   font-weight: 600;
-  color: #1e293b;
   text-align: left;
 }
 
 .dark .word-document-body th {
-  background-color: #1e293b;
-  color: #f8fafc;
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+.word-document-body td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+  min-width: 60px;
+  min-height: 36px;
+  vertical-align: top;
+  color: inherit;
+}
+
+.dark .word-document-body td {
+  border-color: #475569 !important;
 }
 
 /* Zebra striping hover on table rows */
