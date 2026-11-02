@@ -22,17 +22,23 @@ import {
   Mail, 
   Building, 
   Loader2,
-  AlertCircle
+  AlertCircle,
+  FolderPlus,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
-import { User, Subject, ScheduleItem, TeacherRecord, Topic, PracticalWork } from '../types';
+import { User, Subject, ScheduleItem, TeacherRecord, Topic, PracticalWork, CollegeGroup, UserRole } from '../types';
 import { 
   isSupabaseConfigured, 
   fetchAllProfilesFromDb, 
   deleteProfileFromDb, 
   createTeacherProfileInDb,
+  updateUserRoleInDb,
+  updateUserGroupInDb,
   isSuperAdminEmail 
 } from '../lib/supabase';
-import { getRegisteredStudentsForGroup, removeStudentFromRegistry } from '../lib/studentRegistry';
+import { getRegisteredStudentsForGroup, removeStudentFromRegistry, registerStudentInGroup } from '../lib/studentRegistry';
+import { getAvailableGroups, createCollegeGroup, deleteCollegeGroup } from '../lib/groupRegistry';
 
 interface AdminPanelProps {
   currentUser: User;
@@ -63,7 +69,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   scheduleItems,
   onUpdateSchedule
 }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'subjects' | 'teachers' | 'schedule'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'groups' | 'subjects' | 'teachers' | 'schedule'>('users');
   const hasSupabase = isSupabaseConfigured();
 
   // Notification message
@@ -74,7 +80,61 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   /* =========================================================================
-     1. USERS MANAGEMENT (STUDENTS & TEACHERS) WITH 1-CLICK DELETE
+     COLLEGE GROUPS STATE & HANDLERS
+     ========================================================================= */
+  const [collegeGroups, setCollegeGroups] = useState<CollegeGroup[]>(() => {
+    return getAvailableGroups();
+  });
+  const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
+  const [groupToDelete, setGroupToDelete] = useState<CollegeGroup | null>(null);
+
+  // New Group Form
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupCourse, setNewGroupCourse] = useState<number>(3);
+  const [newGroupSpecialty, setNewGroupSpecialty] = useState('ПОИТ — Программное обеспечение информационных технологий');
+  const [newGroupSelectedSubjs, setNewGroupSelectedSubjs] = useState<string[]>(allSubjects.map(s => s.id));
+
+  const handleCreateGroup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) {
+      showToast('Введите название группы', 'error');
+      return;
+    }
+
+    try {
+      const newGroup: CollegeGroup = {
+        id: `grp-${Date.now()}`,
+        name: newGroupName.trim().toUpperCase(),
+        course: newGroupCourse,
+        specialty: newGroupSpecialty.trim(),
+        subjectIds: newGroupSelectedSubjs
+      };
+
+      const updated = createCollegeGroup(newGroup);
+      setCollegeGroups(updated);
+      showToast(`Группа ${newGroup.name} успешно создана!`, 'success');
+      setIsAddGroupModalOpen(false);
+      setNewGroupName('');
+      setNewGroupCourse(3);
+    } catch (err: any) {
+      showToast(err.message || 'Ошибка создания группы', 'error');
+    }
+  };
+
+  const handleConfirmDeleteGroup = () => {
+    if (!groupToDelete) return;
+    try {
+      const updated = deleteCollegeGroup(groupToDelete.id);
+      setCollegeGroups(updated);
+      showToast(`Группа ${groupToDelete.name} удалена`, 'success');
+      setGroupToDelete(null);
+    } catch (err: any) {
+      showToast(err.message || 'Ошибка удаления группы', 'error');
+    }
+  };
+
+  /* =========================================================================
+     1. USERS MANAGEMENT (STUDENTS & TEACHERS) WITH 1-CLICK DELETE & ROLE PROMOTION
      ========================================================================= */
   const [usersList, setUsersList] = useState<User[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(true);
@@ -85,22 +145,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState<boolean>(false);
 
-  // Load all users from Supabase and local registry
+  // Load all users from Supabase and local registry across all groups
   const loadUsers = async () => {
     setIsLoadingUsers(true);
     try {
       const mergedMap = new Map<string, User>();
 
-      // 1. Load local students
-      const localStudents = getRegisteredStudentsForGroup('37В');
-      localStudents.forEach(s => {
-        mergedMap.set(s.studentId, {
-          id: s.studentId,
-          name: s.studentName,
-          email: s.studentId.includes('@') ? s.studentId : `${s.studentId}@student.lidacollege.by`,
-          role: 'student',
-          group: s.group || '37В',
-          course: 3
+      // 1. Load local students for all available groups
+      const groups = getAvailableGroups();
+      groups.forEach(g => {
+        const localStudents = getRegisteredStudentsForGroup(g.name);
+        localStudents.forEach(s => {
+          mergedMap.set(s.studentId, {
+            id: s.studentId,
+            name: s.studentName,
+            email: s.studentId.includes('@') ? s.studentId : `${s.studentId}@student.lidacollege.by`,
+            role: 'student',
+            group: s.group || g.name,
+            course: g.course || 3
+          });
         });
       });
 
@@ -157,6 +220,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsLoadingUsers(false);
     }
+  };
+
+  const handleRoleChange = async (targetUser: User, newRole: UserRole) => {
+    // 1. Update in local users state
+    setUsersList(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: newRole } : u));
+
+    // 2. If it's the active currentUser, sync localStorage
+    if (targetUser.id === currentUser.id) {
+      const updatedUser = { ...currentUser, role: newRole };
+      localStorage.setItem('study_os_user', JSON.stringify(updatedUser));
+    }
+
+    // 3. Update in Supabase
+    if (hasSupabase && !targetUser.id.startsWith('usr-guest-')) {
+      const res = await updateUserRoleInDb(targetUser.id, newRole);
+      if (!res.success) {
+        showToast(`Ошибка сохранения роли в БД: ${res.error}`, 'error');
+        return;
+      }
+    }
+
+    const roleName = newRole === 'admin' ? 'Администратор' : newRole === 'teacher' ? 'Преподаватель' : 'Студент';
+    showToast(`Пользователю ${targetUser.name} назначена роль: ${roleName}`, 'success');
+  };
+
+  const handleUserGroupChange = async (targetUser: User, newGroup: string) => {
+    const matchedGroup = collegeGroups.find(g => g.name === newGroup);
+    const newCourse = matchedGroup?.course || targetUser.course || 3;
+
+    // 1. Update in local users state
+    setUsersList(prev => prev.map(u => u.id === targetUser.id ? { ...u, group: newGroup, course: newCourse } : u));
+
+    // 2. If self, update in localStorage
+    if (targetUser.id === currentUser.id) {
+      const updatedUser = { ...currentUser, group: newGroup, course: newCourse };
+      localStorage.setItem('study_os_user', JSON.stringify(updatedUser));
+    }
+
+    // 3. Update student registry if student
+    if (targetUser.role === 'student') {
+      removeStudentFromRegistry(targetUser.id, targetUser.group || '37В');
+      registerStudentInGroup({ ...targetUser, group: newGroup, course: newCourse });
+    }
+
+    // 4. Update in Supabase
+    if (hasSupabase && !targetUser.id.startsWith('usr-guest-')) {
+      const res = await updateUserGroupInDb(targetUser.id, newGroup, newCourse);
+      if (!res.success) {
+        showToast(`Ошибка смены группы в БД: ${res.error}`, 'error');
+        return;
+      }
+    }
+
+    showToast(`Участник ${targetUser.name} переведён в группу ${newGroup}`, 'success');
   };
 
   useEffect(() => {
@@ -554,14 +671,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <div className="p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
           <div className="flex items-center justify-between text-[#6B7280] dark:text-[#8E95A2] mb-1">
             <span className="text-xs font-medium">Участников</span>
             <Users className="w-4 h-4 text-blue-500" />
           </div>
           <span className="text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">{usersList.length}</span>
-          <span className="text-[11px] text-gray-400 block mt-0.5">Включая студентов и преподавателей</span>
+          <span className="text-[11px] text-gray-400 block mt-0.5">Студенты и преподаватели</span>
+        </div>
+
+        <div className="p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
+          <div className="flex items-center justify-between text-[#6B7280] dark:text-[#8E95A2] mb-1">
+            <span className="text-xs font-medium">Групп</span>
+            <FolderPlus className="w-4 h-4 text-emerald-500" />
+          </div>
+          <span className="text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">{collegeGroups.length}</span>
+          <span className="text-[11px] text-gray-400 block mt-0.5">Учебные группы</span>
         </div>
 
         <div className="p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
@@ -570,7 +696,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <BookOpen className="w-4 h-4 text-indigo-500" />
           </div>
           <span className="text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">{allSubjects.length}</span>
-          <span className="text-[11px] text-gray-400 block mt-0.5">В учебном плане 37В</span>
+          <span className="text-[11px] text-gray-400 block mt-0.5">В учебном плане</span>
         </div>
 
         <div className="p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
@@ -582,13 +708,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <span className="text-[11px] text-gray-400 block mt-0.5">ЦК колледжа</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
+        <div className="p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between text-[#6B7280] dark:text-[#8E95A2] mb-1">
             <span className="text-xs font-medium">Пар в расписании</span>
             <Calendar className="w-4 h-4 text-rose-500" />
           </div>
           <span className="text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">{scheduleItems.length}</span>
-          <span className="text-[11px] text-gray-400 block mt-0.5">Активные занятия на неделю</span>
+          <span className="text-[11px] text-gray-400 block mt-0.5">Активные занятия</span>
         </div>
       </div>
 
@@ -605,6 +731,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         >
           <Users className="w-4 h-4" />
           <span>Участники сайта ({usersList.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('groups')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+            activeTab === 'groups'
+              ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] shadow-xs'
+              : 'text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F3F3EF]'
+          }`}
+        >
+          <FolderPlus className="w-4 h-4" />
+          <span>Группы ({collegeGroups.length})</span>
         </button>
 
         <button
@@ -759,36 +898,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </td>
 
                           <td className="py-3 px-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                              user.role === 'admin'
-                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300'
-                                : user.role === 'teacher'
-                                ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300'
-                                : 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300'
-                            }`}>
-                              {user.role === 'admin' ? 'Администратор' : user.role === 'teacher' ? 'Преподаватель' : 'Студент'}
-                            </span>
+                            <select
+                              value={user.role}
+                              disabled={isSelf}
+                              onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
+                              title={isSelf ? 'Нельзя изменить роль текущего супер-администратора' : 'Изменить роль пользователя'}
+                              className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500/50 ${
+                                user.role === 'admin'
+                                  ? 'bg-rose-50 dark:bg-rose-950/70 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300'
+                                  : user.role === 'teacher'
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/70 border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-300'
+                                  : 'bg-blue-50 dark:bg-blue-950/70 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300'
+                              }`}
+                            >
+                              <option value="student">Студент</option>
+                              <option value="teacher">Преподаватель</option>
+                              <option value="admin">Администратор</option>
+                            </select>
                           </td>
 
-                          <td className="py-3 px-4 text-gray-600 dark:text-gray-400">
-                            {user.group || '37В'} • {user.course || 3} курс
+                          <td className="py-3 px-4">
+                            <select
+                              value={user.group || '37В'}
+                              disabled={isSelf || user.role === 'teacher'}
+                              onChange={(e) => handleUserGroupChange(user, e.target.value)}
+                              className="px-2 py-1 text-xs rounded-lg bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium"
+                              title="Перевести в другую учебную группу"
+                            >
+                              {collegeGroups.map(g => (
+                                <option key={g.id} value={g.name}>
+                                  Группа {g.name} ({g.course} к.)
+                                </option>
+                              ))}
+                            </select>
                           </td>
 
                           <td className="py-3 px-4 text-right">
-                            <button
-                              type="button"
-                              disabled={isSelf}
-                              onClick={() => setUserToDelete(user)}
-                              title={isSelf ? 'Нельзя удалить текущего администратора' : 'Удалить участника из базы данных'}
-                              className={`p-2 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold ${
-                                isSelf
-                                  ? 'opacity-30 cursor-not-allowed text-gray-400'
-                                  : 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/60'
-                              }`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span className="hidden sm:inline">Удалить</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {user.role !== 'admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRoleChange(user, 'admin')}
+                                  title="Назначить администратором платформы"
+                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50/60 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+                                  <span className="hidden sm:inline">Сделать админом</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={isSelf}
+                                onClick={() => setUserToDelete(user)}
+                                title={isSelf ? 'Нельзя удалить текущего администратора' : 'Удалить участника из базы данных'}
+                                className={`p-2 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold ${
+                                  isSelf
+                                    ? 'opacity-30 cursor-not-allowed text-gray-400'
+                                    : 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-200 dark:hover:border-rose-900/60'
+                                }`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span className="hidden sm:inline">Удалить</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -797,6 +969,112 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          TAB: ГРУППЫ КОЛЛЕДЖА (СОЗДАНИЕ, НАСТРОЙКА, УДАЛЕНИЕ)
+          ===================================================================== */}
+      {activeTab === 'groups' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs">
+            <div>
+              <h2 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                Учебные группы колледжа ({collegeGroups.length})
+              </h2>
+              <p className="text-xs text-[#6B7280] dark:text-[#8E95A2] mt-0.5">
+                Создание учебных групп, привязка предметов и специальностей
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAddGroupModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Создать группу</span>
+            </button>
+          </div>
+
+          {/* Groups Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {collegeGroups.map(group => {
+              const studentsInGroup = usersList.filter(u => (u.group || '37В') === group.name);
+              const isBaseGroup = group.id === '37v' || group.id === 'grp-37v' || group.name === '37В';
+
+              return (
+                <div 
+                  key={group.id}
+                  className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col justify-between gap-4 hover:border-blue-500/30 transition-all"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center font-bold text-base border border-blue-100 dark:border-blue-900/40">
+                          {group.name}
+                        </div>
+                        <div>
+                          <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                            Группа {group.name}
+                          </h3>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-[#181B21] text-gray-600 dark:text-gray-300">
+                            {group.course} курс
+                          </span>
+                        </div>
+                      </div>
+
+                      {isBaseGroup ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                          Базовая
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setGroupToDelete(group)}
+                          title="Удалить группу"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-[#6B7280] dark:text-[#8E95A2] leading-relaxed line-clamp-2">
+                      {group.specialty || 'Специальность не указана'}
+                    </p>
+
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs">
+                      <span className="text-gray-500 font-medium">Студентов в группе:</span>
+                      <span className="font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800/80 px-2 py-0.5 rounded-md">
+                        {studentsInGroup.length}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500 font-medium">Предметов:</span>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">
+                        {group.subjectIds?.length || allSubjects.length} дисциплин
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserSearchQuery(group.name);
+                        setActiveTab('users');
+                      }}
+                      className="w-full py-2 px-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-[#1A1E24] text-xs font-semibold text-gray-700 dark:text-gray-300 text-center transition-colors cursor-pointer"
+                    >
+                      Состав группы ({studentsInGroup.length})
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1162,6 +1440,167 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span>Да, удалить из базы данных</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL: СОЗДАНИЕ НОВОЙ ГРУППЫ
+          ===================================================================== */}
+      {isAddGroupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <FolderPlus className="w-5 h-5 text-blue-600" />
+                <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                  Создание учебной группы
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddGroupModalOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGroup} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
+                    Шифр группы:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Например: 38В"
+                    value={newGroupName}
+                    onChange={e => setNewGroupName(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
+                    Курс обучения:
+                  </label>
+                  <select
+                    value={newGroupCourse}
+                    onChange={e => setNewGroupCourse(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value={1}>1 курс</option>
+                    <option value={2}>2 курс</option>
+                    <option value={3}>3 курс</option>
+                    <option value={4}>4 курс</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
+                  Специальность / Отделение:
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ПОИТ — Программное обеспечение информационных технологий"
+                  value={newGroupSpecialty}
+                  onChange={e => setNewGroupSpecialty(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 text-[#111827] dark:text-[#F3F3EF] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1.5">
+                  Дисциплины группы ({newGroupSelectedSubjs.length}):
+                </label>
+                <div className="max-h-36 overflow-y-auto p-2 rounded-xl bg-gray-50 dark:bg-[#181B21] border border-gray-200 dark:border-gray-800 space-y-1">
+                  {allSubjects.map(s => {
+                    const isChecked = newGroupSelectedSubjs.includes(s.id);
+                    return (
+                      <label key={s.id} className="flex items-center gap-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewGroupSelectedSubjs([...newGroupSelectedSubjs, s.id]);
+                            } else {
+                              setNewGroupSelectedSubjs(newGroupSelectedSubjs.filter(id => id !== s.id));
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="truncate text-gray-800 dark:text-gray-200">{s.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddGroupModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Создать группу</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL: УДАЛЕНИЕ ГРУППЫ
+          ===================================================================== */}
+      {groupToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                  Удаление учебной группы
+                </h3>
+                <span className="text-xs text-gray-500">Подтверждение действия</span>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+              Вы уверены, что хотите удалить группу <strong className="text-gray-900 dark:text-white">{groupToDelete.name}</strong>?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setGroupToDelete(null)}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteGroup}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-xs transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Удалить группу</span>
               </button>
             </div>
           </div>

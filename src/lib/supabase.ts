@@ -640,3 +640,64 @@ export async function createTeacherProfileInDb(teacher: {
 
   return teacherUser;
 }
+
+/**
+ * Update a user's role in Supabase (e.g. promoting to admin, assigning teacher)
+ */
+export async function updateUserRoleInDb(userId: string, newRole: UserRole): Promise<{ success: boolean; error: string | null }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, error: 'Supabase не настроен' };
+  }
+
+  try {
+    const { error } = await client
+      .from('profiles')
+      .update({ 
+        role: newRole, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', userId);
+
+    if (error) {
+      console.warn('Failed to update user role in Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Exception updating user role:', err);
+    return { success: false, error: err.message || 'Ошибка обновления роли' };
+  }
+}
+
+/**
+ * Update a user's group and course in Supabase
+ */
+export async function updateUserGroupInDb(userId: string, newGroup: string, course: number = 3): Promise<{ success: boolean; error: string | null }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, error: 'Supabase не настроен' };
+  }
+
+  try {
+    const { error } = await client
+      .from('profiles')
+      .update({ 
+        group_name: newGroup, 
+        course, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', userId);
+
+    if (error) {
+      console.warn('Failed to update user group in Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error('Exception updating user group:', err);
+    return { success: false, error: err.message || 'Ошибка обновления группы' };
+  }
+}

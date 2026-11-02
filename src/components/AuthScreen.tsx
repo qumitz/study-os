@@ -12,7 +12,7 @@ import {
   Database
 } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { availableGroups } from '../data/mockData';
+import { getAvailableGroups } from '../lib/groupRegistry';
 import { 
   isSupabaseConfigured, 
   signInWithSupabase, 
@@ -32,6 +32,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   isDarkMode,
   setIsDarkMode
 }) => {
+  const availableGroups = getAvailableGroups();
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   
   // Form fields

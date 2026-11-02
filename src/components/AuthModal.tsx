@@ -17,7 +17,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { availableGroups } from '../data/mockData';
+import { getAvailableGroups } from '../lib/groupRegistry';
 import { 
   isSupabaseConfigured, 
   getSupabaseCredentials, 
@@ -42,6 +42,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser
 }) => {
   if (!isOpen) return null;
+
+  const availableGroups = getAvailableGroups();
 
   // Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');

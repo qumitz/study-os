@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { GraduationCap, Users, Shield, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
-import { availableGroups } from '../data/mockData';
+import { getAvailableGroups } from '../lib/groupRegistry';
 
 interface OnboardingModalProps {
   user: User;
@@ -14,6 +14,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   onComplete,
   onLogout
 }) => {
+  const availableGroups = getAvailableGroups();
   const [fullName, setFullName] = useState<string>(user.name || '');
   const [selectedGroup, setSelectedGroup] = useState<string>(user.group || '37В');
   const [selectedRole, setSelectedRole] = useState<UserRole>(user.role || 'student');

@@ -24,6 +24,7 @@ import {
 import { StudentGradeRecord, Subject, Topic, PracticalWork } from '../types';
 import { isSupabaseConfigured, fetchGroupStudentsFromDb } from '../lib/supabase';
 import { getRegisteredStudentsForGroup, saveGroupStudents, mergeStudentRecords } from '../lib/studentRegistry';
+import { getAvailableGroups } from '../lib/groupRegistry';
 
 export interface TeacherDashboardProps {
   subject: Subject;
@@ -68,9 +69,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return subjectsList.find(s => s.id === activeSubjectId) || subject;
   }, [subjectsList, activeSubjectId, subject]);
 
+  const availableGroups = getAvailableGroups();
+  const [activeGroup, setActiveGroup] = useState<string>(currentUserGroup || '37В');
+
+  useEffect(() => {
+    if (currentUserGroup) {
+      setActiveGroup(currentUserGroup);
+    }
+  }, [currentUserGroup]);
+
   // Load registered students for this group (automatically populated when students register)
   const [students, setStudents] = useState<StudentGradeRecord[]>(() => {
-    return getRegisteredStudentsForGroup(currentUserGroup);
+    return getRegisteredStudentsForGroup(currentUserGroup || '37В');
   });
 
   const [searchFilter, setSearchFilter] = useState('');
@@ -90,23 +100,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   // Reload students when group changes
   useEffect(() => {
-    setStudents(getRegisteredStudentsForGroup(currentUserGroup));
-  }, [currentUserGroup]);
+    setStudents(getRegisteredStudentsForGroup(activeGroup));
+  }, [activeGroup]);
 
   // Sync students from Supabase if configured
   useEffect(() => {
     if (isSupabaseConfigured()) {
-      fetchGroupStudentsFromDb(currentUserGroup, activeSubject.id).then((dbStudents) => {
+      fetchGroupStudentsFromDb(activeGroup, activeSubject.id).then((dbStudents) => {
         if (dbStudents !== null) {
-          const local = getRegisteredStudentsForGroup(currentUserGroup);
+          const local = getRegisteredStudentsForGroup(activeGroup);
           const merged = mergeStudentRecords(local, dbStudents);
           setStudents(merged);
           setIsLiveFromDb(true);
-          saveGroupStudents(currentUserGroup, merged);
+          saveGroupStudents(activeGroup, merged);
         }
       });
     }
-  }, [currentUserGroup, activeSubject.id]);
+  }, [activeGroup, activeSubject.id]);
 
   // Helper: get student grades map for any subject
   const getStudentGradesForSubject = (student: StudentGradeRecord, subjId: string): Record<string, number | null> => {
@@ -287,9 +297,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <h1 className="text-xl sm:text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">
                 Журнал успеваемости преподавателя
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                Группа {currentUserGroup}
-              </span>
+              <div className="flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-xl border border-indigo-200 dark:border-indigo-900/60">
+                <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">Группа:</span>
+                <select
+                  value={activeGroup}
+                  onChange={(e) => setActiveGroup(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-indigo-700 dark:text-indigo-300 focus:outline-none cursor-pointer"
+                >
+                  {availableGroups.map((g) => (
+                    <option key={g.id} value={g.name} className="bg-white dark:bg-[#15181E] text-gray-900 dark:text-white">
+                      {g.name} ({g.course} курс)
+                    </option>
+                  ))}
+                </select>
+              </div>
               {isLiveFromDb && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                   <Database className="w-3 h-3 text-emerald-600" />
