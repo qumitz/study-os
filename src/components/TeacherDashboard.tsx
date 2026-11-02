@@ -75,7 +75,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 }) => {
   // Available groups
   const availableGroups = getAvailableGroups();
-  const [activeGroup, setActiveGroup] = useState<string>(currentUserGroup || '37В');
+  const [activeGroup, setActiveGroup] = useState<string>(() => {
+    if (currentUserGroup && currentUserGroup !== 'Все группы') {
+      return currentUserGroup;
+    }
+    const saved = localStorage.getItem('study_os_teacher_active_group');
+    if (saved && availableGroups.some(g => g.name === saved)) {
+      return saved;
+    }
+    return availableGroups[0]?.name || '37В';
+  });
+
+  const handleGroupChange = (groupName: string) => {
+    setActiveGroup(groupName);
+    localStorage.setItem('study_os_teacher_active_group', groupName);
+  };
 
   // Subtabs state: calendar journal / test results / practical reviews
   const [activeSubTab, setActiveSubTab] = useState<'calendar_journal' | 'test_results' | 'practical_reviews'>('calendar_journal');
@@ -413,7 +427,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">Группа:</span>
                 <select
                   value={activeGroup}
-                  onChange={(e) => setActiveGroup(e.target.value)}
+                  onChange={(e) => handleGroupChange(e.target.value)}
                   className="bg-transparent text-xs font-bold text-indigo-700 dark:text-indigo-300 focus:outline-none cursor-pointer"
                 >
                   {availableGroups.map((g) => (
@@ -433,6 +447,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <p className="text-xs sm:text-sm text-[#6B7280] dark:text-[#8E95A2] mt-0.5">
               Преподаватель: <strong className="text-gray-900 dark:text-gray-200">{activeSubject.teacher}</strong> • Дисциплина: <strong className="text-indigo-600 dark:text-indigo-400">{activeSubject.title}</strong>
             </p>
+
+            {/* Quick Group Tabs for Teacher */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-2.5">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 mr-1 flex items-center gap-1">
+                <Users className="w-3.5 h-3.5 text-indigo-500" />
+                Группы:
+              </span>
+              {availableGroups.map((g) => {
+                const isSelected = activeGroup === g.name;
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => handleGroupChange(g.name)}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-500/20'
+                        : 'bg-gray-100 dark:bg-[#1E232B] text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200/80 dark:border-gray-800'
+                    }`}
+                  >
+                    <span>Группа {g.name}</span>
+                    <span className={`text-[10px] px-1 py-0.2 rounded font-normal ${isSelected ? 'bg-indigo-700 text-indigo-100' : 'text-gray-400'}`}>
+                      {g.course} курс
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
