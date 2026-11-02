@@ -357,7 +357,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {subject.practicalWorks.map(pr => {
             const relatedTopic = subject.topics.find(t => t.practicalWorkRef === pr.number);
-            const isCompleted = relatedTopic && progress.topicStatuses[relatedTopic.id] === 'completed';
+            const submission = getStudentPracticalSubmission(currentUser.id, subject.id, pr.number);
+            const isCompleted = submission?.status === 'graded' || (relatedTopic && progress.topicStatuses[relatedTopic.id] === 'completed');
 
             return (
               <div key={pr.id} className="p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-sm flex flex-col justify-between space-y-4">
@@ -390,18 +391,51 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                  <span className={`text-xs font-semibold ${isCompleted ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {isCompleted ? '✓ Отчёт принят' : 'Ожидает выполнения'}
-                  </span>
-                  {relatedTopic && (
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-1.5">
+                    {submission?.status === 'graded' ? (
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        ✓ Проверено • Оценка: {submission.grade}/10
+                      </span>
+                    ) : submission?.status === 'submitted' ? (
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        На проверке у преподавателя
+                      </span>
+                    ) : submission?.status === 'needs_revision' ? (
+                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                        ⚠️ Требуется доработка
+                      </span>
+                    ) : submission?.status === 'draft' ? (
+                      <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                        📝 Черновик сохранён
+                      </span>
+                    ) : (
+                      <span className={`text-xs font-semibold ${isCompleted ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        {isCompleted ? '✓ Отчёт сдан' : 'Ожидает выполнения'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setSelectedTopic(relatedTopic)}
-                      className="text-xs font-bold text-[#2563EB] hover:underline"
+                      onClick={() => setActivePracticalForEditor(pr)}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                     >
-                      Открыть задание →
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>{submission?.status ? 'Открыть отчёт (Word)' : 'Выполнить в Word →'}</span>
                     </button>
-                  )}
+
+                    {relatedTopic && (
+                      <button
+                        onClick={() => setSelectedTopic(relatedTopic)}
+                        className="text-xs font-semibold text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                        title="Открыть конспект"
+                      >
+                        Тема
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -489,6 +523,19 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
           }}
           isCompleted={progress.topicStatuses[selectedTopic.id] === 'completed'}
           savedGrade={progress.grades[selectedTopic.id]}
+        />
+      )}
+      {/* Practical Report Editor (Embedded Word) */}
+      {activePracticalForEditor && (
+        <PracticalReportEditor
+          work={activePracticalForEditor}
+          subjectId={subject.id}
+          subjectTitle={subject.title}
+          currentUser={currentUser}
+          onClose={() => setActivePracticalForEditor(null)}
+          onSubmitted={() => {
+            setActivePracticalForEditor(null);
+          }}
         />
       )}
     </div>

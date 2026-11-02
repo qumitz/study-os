@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Sun, Moon, Sparkles, Bell, User as UserIcon, LogOut, RefreshCw, Shield, GraduationCap, Users } from 'lucide-react';
 import { User, UserRole } from '../types';
+import { isSuperAdminEmail } from '../lib/supabase';
 
 interface HeaderProps {
   isDarkMode: boolean;
@@ -27,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const isAdmin = isSuperAdmin || currentUser.role === 'admin' || isSuperAdminEmail(currentUser.email, currentUser.name);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
