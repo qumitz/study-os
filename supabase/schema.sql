@@ -38,11 +38,18 @@ create policy "Профили видны авторизованным польз
   to authenticated
   using (true);
 
--- Создавать и обновлять свой профиль может только владелец
-create policy "Пользователь может редактировать свой профиль"
+-- Создавать свой профиль может владелец, обновлять — владелец или администратор
+create policy "Пользователь или админ может редактировать профиль"
   on public.profiles for update
   to authenticated
-  using (auth.uid() = id);
+  using (
+    auth.uid() = id
+    or exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role = 'admin'
+    )
+  );
 
 create policy "Пользователь может вставлять свой профиль"
   on public.profiles for insert
@@ -156,6 +163,40 @@ begin
 
   -- 3. Удаляем из auth.users
   delete from auth.users where id = target_user_id;
+
+  return jsonb_build_object('success', true);
+exception when others then
+  return jsonb_build_object('success', false, 'error', SQLERRM);
+end;
+$$;
+
+-- 9. Функция назначения роли пользователю администратором
+create or replace function public.update_user_role_by_admin(target_user_id uuid, new_role text)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  caller_role text;
+  caller_email text;
+begin
+  -- Проверяем права вызывающего
+  select role, email into caller_role, caller_email
+  from public.profiles
+  where id = auth.uid();
+
+  if coalesce(caller_role, '') != 'admin' 
+     and coalesce(caller_email, '') not in ('den.krivenchenko@gmail.com', 'den.krivencheko@gmail.com') then
+    return jsonb_build_object('success', false, 'error', 'Недостаточно прав администратора');
+  end if;
+
+  if new_role not in ('student', 'teacher', 'admin') then
+    return jsonb_build_object('success', false, 'error', 'Недопустимая роль');
+  end if;
+
+  update public.profiles
+  set role = new_role, updated_at = now()
+  where id = target_user_id;
 
   return jsonb_build_object('success', true);
 exception when others then

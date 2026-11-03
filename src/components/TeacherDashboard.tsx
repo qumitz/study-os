@@ -22,8 +22,11 @@ import {
   Filter,
   Eye,
   Send,
-  MessageSquare
+  MessageSquare,
+  FastForward
 } from 'lucide-react';
+import { FastForwardTopicModal } from './FastForwardTopicModal';
+import { getGroupCheckpoint, GroupCurriculumCheckpoint } from '../lib/curriculumSync';
 import { StudentGradeRecord, Subject, Topic, PracticalWork, PracticalSubmission } from '../types';
 import { 
   getRegisteredStudentsForGroup, 
@@ -92,7 +95,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   // Subtabs state: calendar journal / test results / practical reviews
-  const [activeSubTab, setActiveSubTab] = useState<'calendar_journal' | 'test_results' | 'practical_reviews'>('calendar_journal');
+  const [activeSubTab, setActiveSubTab] = useState<'calendar_journal' | 'test_results' | 'practical_reviews' | 'curriculum_sync'>('calendar_journal');
+
+
 
   // Academic month state for calendar journal: defaults to November 2026 ('2026-11')
   const [selectedMonthId, setSelectedMonthId] = useState<string>('2026-11');
@@ -110,6 +115,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const activeSubject = useMemo(() => {
     return subjectsList.find(s => s.id === activeSubjectId) || subject;
   }, [subjectsList, activeSubjectId, subject]);
+
+  // Fast-Forward Modal state
+  const [showFastForwardModal, setShowFastForwardModal] = useState<boolean>(false);
+  const [fastForwardTopicId, setFastForwardTopicId] = useState<string | undefined>(undefined);
+  const [activeCheckpoint, setActiveCheckpoint] = useState<GroupCurriculumCheckpoint | null>(() => {
+    return getGroupCheckpoint(activeGroup, activeSubjectId);
+  });
+
+  const refreshCheckpoint = () => {
+    setActiveCheckpoint(getGroupCheckpoint(activeGroup, activeSubjectId));
+  };
+
+  useEffect(() => {
+    refreshCheckpoint();
+  }, [activeGroup, activeSubjectId]);
+
+  useEffect(() => {
+    const handleProgressUpdated = () => {
+      refreshCheckpoint();
+      setStudents(getRegisteredStudentsForGroup(activeGroup));
+    };
+    window.addEventListener('study_os_progress_updated', handleProgressUpdated);
+    return () => window.removeEventListener('study_os_progress_updated', handleProgressUpdated);
+  }, [activeGroup, activeSubjectId]);
 
   // Load registered students for active group
   const [students, setStudents] = useState<StudentGradeRecord[]>(() => {
@@ -419,6 +448,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              setFastForwardTopicId(undefined);
+              setShowFastForwardModal(true);
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+            title="Перевести всех учеников на конкретную тему и зачесть предыдущие"
+          >
+            <FastForward className="w-3.5 h-3.5" />
+            <span>Перевести группу к теме</span>
+          </button>
               <h1 className="text-xl sm:text-2xl font-bold text-[#111827] dark:text-[#F3F3EF]">
                 Журнал группы {activeGroup}
               </h1>
@@ -501,7 +542,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       </div>
 
       {/* Main Subtabs Navigation */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-gray-100 dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 text-xs font-semibold">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 p-1.5 rounded-2xl bg-gray-100 dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 text-xs font-semibold">
         <button
           type="button"
           onClick={() => setActiveSubTab('calendar_journal')}
@@ -544,6 +585,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {pendingSubmissionsCount}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('curriculum_sync')}
+          className={`py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeSubTab === 'curriculum_sync'
+              ? 'bg-white dark:bg-[#20252F] text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <FastForward className="w-4 h-4 text-blue-500" />
+          <span>Темы и прогресс</span>
         </button>
       </div>
 
@@ -1016,6 +1070,162 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* =====================================================================
+          TAB 4: УПРАВЛЕНИЕ ТЕМАМИ И БЫСТРЫЙ ЗАЧЁТ (СИНХРОНИЗАЦИЯ ПРОГРЕССА)
+          ===================================================================== */}
+      {activeSubTab === 'curriculum_sync' && (
+        <div className="space-y-4">
+          {/* Checkpoint Status Banner */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                <FastForward className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-bold text-[#111827] dark:text-[#F3F3EF]">
+                    Синхронизация прогресса группы {activeGroup}
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    {activeSubject.title}
+                  </span>
+                </div>
+                {activeCheckpoint ? (
+                  <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                    Текущая изучаемая тема группы:{' '}
+                    <strong className="text-blue-600 dark:text-blue-400 font-semibold">
+                      {activeCheckpoint.targetTopicCode} — {activeCheckpoint.targetTopicTitle}
+                    </strong>
+                    . Все предшествующие темы ({activeCheckpoint.completedTopicIds.length} шт.) автоматически зачтены ученикам.
+                  </p>
+                ) : (
+                  <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] leading-relaxed">
+                    Чекпоинт для группы пока не установлен. Студенты начинают с первой темы. Выберите тему ниже, чтобы мгновенно зачесть все пройденные материалы колледжа.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFastForwardTopicId(undefined);
+                setShowFastForwardModal(true);
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors shadow-xs shrink-0 cursor-pointer"
+            >
+              <FastForward className="w-4 h-4" />
+              <span>Перевести группу к теме</span>
+            </button>
+          </div>
+
+          {/* Sections and Topics Matrix */}
+          <div className="space-y-4">
+            {activeSubject.sections.map((section) => {
+              const sectionTopics = activeSubject.topics.filter(t => t.sectionId === section.id || section.topicIds?.includes(t.id));
+
+              return (
+                <div
+                  key={section.id}
+                  className="rounded-2xl bg-white dark:bg-[#15181E] border border-[#E5E7EB] dark:border-[#262A32] shadow-xs overflow-hidden"
+                >
+                  {/* Section Header */}
+                  <div className="px-4 sm:px-5 py-3 bg-[#F9FAFB] dark:bg-[#1A1E26] border-b border-[#E5E7EB] dark:border-[#262A32] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        {section.romanNum}
+                      </span>
+                      <h4 className="text-xs sm:text-sm font-bold text-[#111827] dark:text-[#F3F3EF]">
+                        {section.title}
+                      </h4>
+                    </div>
+                    <span className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                      {section.hours} ч. • {sectionTopics.length} тем
+                    </span>
+                  </div>
+
+                  {/* Topics List */}
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800/80">
+                    {sectionTopics.map((topic) => {
+                      const isCompletedByCheckpoint = activeCheckpoint?.completedTopicIds.includes(topic.id);
+                      const isTargetCheckpoint = activeCheckpoint?.targetTopicId === topic.id;
+
+                      return (
+                        <div
+                          key={topic.id}
+                          className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                            isTargetCheckpoint
+                              ? 'bg-blue-50/50 dark:bg-blue-950/20'
+                              : isCompletedByCheckpoint
+                              ? 'bg-emerald-50/30 dark:bg-emerald-950/10'
+                              : 'hover:bg-gray-50/60 dark:hover:bg-gray-800/30'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className={`text-xs font-bold px-2 py-1 rounded-md shrink-0 font-mono ${
+                              isTargetCheckpoint
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : isCompletedByCheckpoint
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                            }`}>
+                              {topic.code}
+                            </span>
+                            <div>
+                              <div className="text-xs sm:text-sm font-semibold text-[#111827] dark:text-[#F3F3EF] leading-snug">
+                                {topic.title}
+                              </div>
+                              <div className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mt-0.5 line-clamp-1">
+                                {topic.shortDescription}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                            {isTargetCheckpoint ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                <FastForward className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                                <span>Текущая тема группы</span>
+                              </span>
+                            ) : isCompletedByCheckpoint ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Зачтено группе</span>
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-xs text-gray-400 bg-gray-100 dark:bg-gray-800/60">
+                                Закрыто
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFastForwardTopicId(topic.id);
+                                setShowFastForwardModal(true);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                                isTargetCheckpoint
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 border border-blue-300 dark:border-blue-700'
+                                  : 'border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60'
+                              }`}
+                              title={`Перевести группу на тему ${topic.code} и зачесть все темы до неё`}
+                            >
+                              <FastForward className="w-3.5 h-3.5" />
+                              <span>{isTargetCheckpoint ? 'Текущая' : 'Сделать текущей'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
           POPOVER: БЫСТРОЕ ВЫСТАВЛЕНИЕ ОЦЕНКИ В КАЛЕНДАРНОМ ЖУРНАЛЕ
           ===================================================================== */}
       {activeGradePopover && (
@@ -1432,6 +1642,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Fast-Forward Topic Modal */}
+      <FastForwardTopicModal
+        isOpen={showFastForwardModal}
+        onClose={() => setShowFastForwardModal(false)}
+        subject={activeSubject}
+        allSubjects={subjectsList}
+        initialTopicId={fastForwardTopicId}
+        initialGroupName={activeGroup}
+        currentTeacherName="Преподаватель"
+        onSuccess={() => {
+          refreshCheckpoint();
+          setStudents(getRegisteredStudentsForGroup(activeGroup));
+        }}
+      />
     </div>
   );
 };

@@ -43,7 +43,9 @@ import {
   registerStudentInGroup,
   markUserAsDeleted,
   isUserDeleted,
-  removeUserFromDeleted
+  removeUserFromDeleted,
+  saveUserRole,
+  getUserAssignedRole
 } from '../lib/studentRegistry';
 import { getAvailableGroups, createCollegeGroup, deleteCollegeGroup } from '../lib/groupRegistry';
 
@@ -57,16 +59,7 @@ interface AdminPanelProps {
   onSwitchTab?: (tab: string) => void;
 }
 
-const DEFAULT_TEACHERS: TeacherRecord[] = [
-  {
-    id: 'tch-seledtsov-1',
-    name: 'Селедцов Александр Игоревич',
-    email: 'a.seledtsov@lidacollege.by',
-    department: 'ЦК программного обеспечения и информационных технологий',
-    subjects: ['secbasics', 'network', 'pms', 'transmission', 'mobile', 'cad', 'tsi', 'tesvt'],
-    room: 'Ауд. 312'
-  }
-];
+const DEFAULT_TEACHERS: TeacherRecord[] = [];
 
 export function getSavedTeachers(): TeacherRecord[] {
   const saved = localStorage.getItem('study_os_teachers');
@@ -182,11 +175,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const localStudents = getRegisteredStudentsForGroup(g.name);
         localStudents.forEach(s => {
           if (isUserDeleted(s.studentId, s.studentId)) return;
+          const assignedRole = getUserAssignedRole(s.studentId, s.studentId);
           mergedMap.set(s.studentId, {
             id: s.studentId,
             name: s.studentName,
             email: s.studentId.includes('@') ? s.studentId : `${s.studentId}@student.lidacollege.by`,
-            role: 'student',
+            role: assignedRole || 'student',
             group: s.group || g.name,
             course: g.course || 3
           });
@@ -197,11 +191,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const currentTeachers = getSavedTeachers();
       currentTeachers.forEach(t => {
         if (!isUserDeleted(t.id, t.email)) {
+          const assignedRole = getUserAssignedRole(t.id, t.email);
           mergedMap.set(t.id, {
             id: t.id,
             name: t.name,
             email: t.email,
-            role: 'teacher',
+            role: assignedRole || 'teacher',
             group: '37В',
             course: 3
           });
@@ -213,14 +208,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const cloudProfiles = await fetchAllProfilesFromDb();
         cloudProfiles.forEach(p => {
           if (!isUserDeleted(p.id, p.email)) {
-            mergedMap.set(p.id, p);
+            const assignedRole = getUserAssignedRole(p.id, p.email);
+            mergedMap.set(p.id, {
+              ...p,
+              role: assignedRole || p.role
+            });
           }
         });
       }
 
       // Always ensure current user is present
       if (currentUser?.id && !isUserDeleted(currentUser.id, currentUser.email)) {
-        mergedMap.set(currentUser.id, currentUser);
+        const assignedRole = getUserAssignedRole(currentUser.id, currentUser.email);
+        mergedMap.set(currentUser.id, {
+          ...currentUser,
+          role: assignedRole || currentUser.role
+        });
       }
 
       setUsersList(Array.from(mergedMap.values()));
@@ -235,18 +238,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     // 1. Update in local users state
     setUsersList(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: newRole } : u));
 
-    // 2. If it's the active currentUser, sync localStorage
-    if (targetUser.id === currentUser.id) {
+    // 2. Persist in assigned roles storage (both by id and email)
+    saveUserRole(targetUser.id, newRole, targetUser.email);
+
+    // 3. If it's the active currentUser, sync localStorage
+    if (targetUser.id === currentUser.id || (currentUser.email && targetUser.email?.toLowerCase() === currentUser.email.toLowerCase())) {
       const updatedUser = { ...currentUser, role: newRole };
       localStorage.setItem('study_os_user', JSON.stringify(updatedUser));
     }
 
-    // 3. Update in Supabase
+    // 4. Update in Supabase
     if (hasSupabase && !targetUser.id.startsWith('usr-guest-')) {
-      const res = await updateUserRoleInDb(targetUser.id, newRole);
-      if (!res.success) {
-        showToast(`Ошибка сохранения роли в БД: ${res.error}`, 'error');
-        return;
+      const res = await updateUserRoleInDb(targetUser.id, newRole, targetUser.email);
+      if (!res.success && res.error) {
+        console.warn('Supabase role update warning:', res.error);
       }
     }
 
@@ -262,7 +267,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setUsersList(prev => prev.map(u => u.id === targetUser.id ? { ...u, group: newGroup, course: newCourse } : u));
 
     // 2. If self, update in localStorage
-    if (targetUser.id === currentUser.id) {
+    if (targetUser.id === currentUser.id || (currentUser.email && targetUser.email?.toLowerCase() === currentUser.email.toLowerCase())) {
       const updatedUser = { ...currentUser, group: newGroup, course: newCourse };
       localStorage.setItem('study_os_user', JSON.stringify(updatedUser));
     }
@@ -275,8 +280,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // 4. Update in Supabase
     if (hasSupabase && !targetUser.id.startsWith('usr-guest-')) {
-      const res = await updateUserGroupInDb(targetUser.id, newGroup, newCourse);
-      if (!res.success) {
+      const res = await updateUserGroupInDb(targetUser.id, newGroup, newCourse, targetUser.email);
+      if (!res.success && res.error) {
         showToast(`Ошибка смены группы в БД: ${res.error}`, 'error');
         return;
       }
@@ -312,7 +317,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       // 2. Delete from Supabase cloud database if real remote user
       if (hasSupabase && !userToDelete.id.startsWith('local-')) {
-        const res = await deleteProfileFromDb(userToDelete.id);
+        const res = await deleteProfileFromDb(userToDelete.id, userToDelete.email);
         if (!res.success && res.error) {
           console.warn('Supabase delete returned warning:', res.error);
         }
@@ -555,7 +560,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     // Also delete user profile if exists in Supabase
     if (hasSupabase) {
-      await deleteProfileFromDb(teacherToDelete.id);
+      await deleteProfileFromDb(teacherToDelete.id, teacherToDelete.email);
     }
 
     loadUsers();

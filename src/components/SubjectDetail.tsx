@@ -10,8 +10,10 @@ import {
   ChevronRight,
   BookOpen,
   Sparkles,
-  FileText
+  FileText,
+  FastForward
 } from 'lucide-react';
+import { FastForwardTopicModal } from './FastForwardTopicModal';
 import { Subject, Topic, TopicStatus, StudentProgress, User, PracticalWork } from '../types';
 import { SkillTree } from './SkillTree';
 import { TopicModal } from './TopicModal';
@@ -49,6 +51,8 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'tree' | 'list' | 'practicals' | 'tests'>(initialViewMode || 'tree');
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [showFastForwardModal, setShowFastForwardModal] = useState<boolean>(false);
+  const [fastForwardTopicId, setFastForwardTopicId] = useState<string | undefined>(undefined);
   const [activePracticalForEditor, setActivePracticalForEditor] = useState<PracticalWork | null>(null);
 
   // Compute progress statistics
@@ -219,6 +223,20 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
             <div className="text-[11px] sm:text-xs font-semibold text-[#2563EB] dark:text-[#60A5FA] truncate max-w-full">
               {isTeacherOrAdmin ? 'Доступ ко всем темам открыт' : `Текущая тема: ${recommendedTopic.code} — ${recommendedTopic.title}`}
             </div>
+            {isTeacherOrAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFastForwardTopicId(undefined);
+                  setShowFastForwardModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-xs cursor-pointer"
+                title="Перевести всех учеников на конкретную тему и зачесть предыдущие"
+              >
+                <FastForward className="w-3.5 h-3.5" />
+                <span>Перевести группу к теме</span>
+              </button>
+            )}
           </div>
 
           {/* Interactive Skill Tree Canvas */}
@@ -301,6 +319,20 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
                     )}
 
                     <ChevronRight className="w-4 h-4 text-gray-400" />
+                    {isTeacherOrAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFastForwardTopicId(topic.id);
+                          setShowFastForwardModal(true);
+                        }}
+                        className="p-1.5 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition-colors cursor-pointer"
+                        title={`Перевести группу на тему ${topic.code} и зачесть все темы до неё`}
+                      >
+                        <FastForward className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -546,8 +578,23 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
           }}
           isCompleted={progress.topicStatuses[selectedTopic.id] === 'completed'}
           savedGrade={progress.grades[selectedTopic.id]}
+          onFastForward={(topicId) => {
+            setSelectedTopic(null);
+            setFastForwardTopicId(topicId);
+            setShowFastForwardModal(true);
+          }}
         />
       )}
+      {/* Fast Forward Modal */}
+      <FastForwardTopicModal
+        isOpen={showFastForwardModal}
+        onClose={() => setShowFastForwardModal(false)}
+        subject={subject}
+        initialTopicId={fastForwardTopicId}
+        initialGroupName={currentUser.group && currentUser.group !== 'Все группы' ? currentUser.group : '37В'}
+        currentTeacherName={currentUser.name}
+      />
+
       {/* Practical Report Editor (Embedded Word) */}
       {activePracticalForEditor && (
         <PracticalReportEditor

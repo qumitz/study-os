@@ -12,6 +12,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { SettingsView } from './components/SettingsView';
 import { MobileNav } from './components/MobileNav';
 import { allSubjects, getSubjectById, defaultSubjectId } from './data/allSubjects';
+import { applyGroupCheckpointsToProgress } from './lib/curriculumSync';
 import { StudentProgress, TopicStatus, User, UserRole, Topic, Subject, ThemeMode, ScheduleItem } from './types';
 import { 
   getSupabaseClient, 
@@ -25,7 +26,7 @@ import {
   signOutFromSupabase,
   isSuperAdminEmail 
 } from './lib/supabase';
-import { registerStudentInGroup, updateStudentTopicGrade } from './lib/studentRegistry';
+import { registerStudentInGroup, updateStudentTopicGrade, getUserAssignedRole } from './lib/studentRegistry';
 
 export const defaultGuestUser: User = {
   id: '',
@@ -70,6 +71,11 @@ export default function App() {
         }
         if (isSuperAdminEmail(parsed.email, parsed.name)) {
           parsed.role = parsed.role || 'admin';
+        } else {
+          const assigned = getUserAssignedRole(parsed.id, parsed.email);
+          if (assigned) {
+            parsed.role = assigned;
+          }
         }
         return parsed;
       } catch (e) {
@@ -97,6 +103,10 @@ export default function App() {
     client.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const profile = await syncUserSession(session.user);
+        const assigned = getUserAssignedRole(profile.id, profile.email);
+        if (assigned) {
+          profile.role = assigned;
+        }
         setCurrentUser(profile);
         localStorage.setItem('study_os_user', JSON.stringify(profile));
         if (profile.role === 'student') {
@@ -119,6 +129,10 @@ export default function App() {
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
       if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
         const profile = await syncUserSession(session.user);
+        const assigned = getUserAssignedRole(profile.id, profile.email);
+        if (assigned) {
+          profile.role = assigned;
+        }
         setCurrentUser(profile);
         localStorage.setItem('study_os_user', JSON.stringify(profile));
         if (profile.role === 'student') {
@@ -250,15 +264,21 @@ export default function App() {
     subjects.forEach((subj) => {
       const key = `study_os_progress_${userId}_${subj.id}`;
       const saved = localStorage.getItem(key);
+      let prog = defaultProg[subj.id] || { topicStatuses: {}, grades: {} };
       if (saved) {
         try {
-          result[subj.id] = JSON.parse(saved);
-          return;
+          prog = JSON.parse(saved);
         } catch (e) {
           console.error('Failed to parse progress for', subj.id, e);
         }
       }
-      result[subj.id] = defaultProg[subj.id] || { topicStatuses: {}, grades: {} };
+
+      // Automatically apply group checkpoints for student accounts
+      if (currentUser.role === 'student' && currentUser.group) {
+        prog = applyGroupCheckpointsToProgress(currentUser.group, subj, prog);
+      }
+
+      result[subj.id] = prog;
     });
     return result;
   };
@@ -287,8 +307,12 @@ export default function App() {
             const merged = { ...prev };
             subjects.forEach((subj) => {
               if (cloudProgress[subj.id] && Object.keys(cloudProgress[subj.id].topicStatuses).length > 0) {
-                merged[subj.id] = cloudProgress[subj.id];
-                localStorage.setItem(`study_os_progress_${currentUser.id}_${subj.id}`, JSON.stringify(cloudProgress[subj.id]));
+                let prog = cloudProgress[subj.id];
+                if (currentUser.role === 'student' && currentUser.group) {
+                  prog = applyGroupCheckpointsToProgress(currentUser.group, subj, prog);
+                }
+                merged[subj.id] = prog;
+                localStorage.setItem(`study_os_progress_${currentUser.id}_${subj.id}`, JSON.stringify(prog));
               }
             });
             return merged;
@@ -296,7 +320,18 @@ export default function App() {
         }
       });
     }
-  }, [currentUser.id, subjects]);
+  }, [currentUser.id, currentUser.group, currentUser.role, subjects]);
+
+  // Real-time synchronization when a teacher advances curriculum or grades
+  useEffect(() => {
+    const handleProgressUpdated = () => {
+      if (currentUser.id) {
+        setAllProgress(loadUserProgressFromStorage(currentUser.id));
+      }
+    };
+    window.addEventListener('study_os_progress_updated', handleProgressUpdated);
+    return () => window.removeEventListener('study_os_progress_updated', handleProgressUpdated);
+  }, [currentUser.id, currentUser.group, currentUser.role, subjects]);
 
   // Current active subject model with any admin overrides applied
   const baseSubject = subjects.find(s => s.id === activeSubjectId) || getSubjectById(activeSubjectId) || subjects[0] || allSubjects[0];

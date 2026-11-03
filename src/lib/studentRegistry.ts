@@ -1,7 +1,53 @@
-import { StudentGradeRecord, User } from '../types';
+import { StudentGradeRecord, User, UserRole } from '../types';
 
 const STORAGE_PREFIX = 'study_os_students_';
 const DELETED_USERS_STORAGE_KEY = 'study_os_deleted_user_identifiers';
+const USER_ROLES_STORAGE_KEY = 'study_os_user_assigned_roles';
+
+/**
+ * Get all assigned user roles (mapping of normalized ID or email -> UserRole)
+ */
+export function getAllAssignedRoles(): Record<string, UserRole> {
+  try {
+    const saved = localStorage.getItem(USER_ROLES_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save an assigned role for a user (by ID and optional email)
+ */
+export function saveUserRole(id: string, role: UserRole, email?: string): void {
+  try {
+    const roles = getAllAssignedRoles();
+    if (id) {
+      roles[id.toLowerCase().trim()] = role;
+    }
+    if (email) {
+      roles[email.toLowerCase().trim()] = role;
+    }
+    localStorage.setItem(USER_ROLES_STORAGE_KEY, JSON.stringify(roles));
+  } catch (e) {
+    console.error('Failed to save user role', e);
+  }
+}
+
+/**
+ * Get an assigned role for a user by ID or email
+ */
+export function getUserAssignedRole(id?: string, email?: string): UserRole | null {
+  if (!id && !email) return null;
+  const roles = getAllAssignedRoles();
+  if (id && roles[id.toLowerCase().trim()]) {
+    return roles[id.toLowerCase().trim()];
+  }
+  if (email && roles[email.toLowerCase().trim()]) {
+    return roles[email.toLowerCase().trim()];
+  }
+  return null;
+}
 
 /**
  * Get all deleted user identifiers (IDs and normalized emails)

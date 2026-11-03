@@ -11,7 +11,8 @@ import {
   ArrowRight,
   ExternalLink,
   RotateCcw,
-  Edit3
+  Edit3,
+  FastForward
 } from 'lucide-react';
 import { Topic, Question } from '../types';
 import { AdminTopicEditor } from './AdminTopicEditor';
@@ -32,6 +33,7 @@ interface TopicModalProps {
   isAdmin?: boolean;
   isTeacher?: boolean;
   onSaveTopic?: (updatedTopic: Topic) => void;
+  onFastForward?: (topicId: string) => void;
 }
 
 export const TopicModal: React.FC<TopicModalProps> = ({
@@ -42,7 +44,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
   savedGrade,
   isAdmin = false,
   isTeacher = false,
-  onSaveTopic
+  onSaveTopic,
+  onFastForward
 }) => {
   if (!topic) return null;
 
@@ -148,6 +151,19 @@ export const TopicModal: React.FC<TopicModalProps> = ({
           </div>
           
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {isTeacherOrAdmin && onFastForward && (
+              <button
+                type="button"
+                onClick={() => onFastForward(topic.id)}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors shadow-xs cursor-pointer"
+                title="Перевести всех учеников на эту тему и зачесть предыдущие"
+              >
+                <FastForward className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Перевести группу на эту тему</span>
+                <span className="sm:hidden">В группу</span>
+              </button>
+            )}
+
             {isTeacherOrAdmin && (
               <button
                 onClick={() => setIsEditorOpen(true)}

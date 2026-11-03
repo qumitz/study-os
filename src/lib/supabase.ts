@@ -307,7 +307,7 @@ export async function upsertProfile(user: User): Promise<boolean> {
   if (!client) return false;
 
   const isAdmin = isSuperAdminEmail(user.email, user.name);
-  const effectiveRole = isAdmin ? 'admin' : (user.role === 'admin' ? 'student' : user.role);
+  const effectiveRole = isAdmin ? 'admin' : user.role;
 
   try {
     const { error } = await client
@@ -599,44 +599,60 @@ export function isValidUuid(id: string): boolean {
 /**
  * Delete a user profile and their associated progress from Supabase
  */
-export async function deleteProfileFromDb(userId: string): Promise<{ success: boolean; error: string | null }> {
+export async function deleteProfileFromDb(userId: string, userEmail?: string): Promise<{ success: boolean; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
     return { success: false, error: 'Supabase не подключен' };
   }
 
-  // If userId is not a valid UUID (e.g. mock or local id like tch-seledtsov-1),
-  // skip remote database query to prevent Postgres UUID syntax errors (code 22P02)
-  if (!isValidUuid(userId)) {
-    return { success: true, error: null };
-  }
-
   try {
-    // 1. Try RPC delete first (if admin function is created in Supabase)
-    try {
-      const { data: rpcData, error: rpcError } = await client.rpc('delete_user_by_admin', { target_user_id: userId });
-      if (!rpcError && (rpcData as any)?.success !== false) {
-        return { success: true, error: null };
+    // 1. If userId is a valid UUID, attempt deletion by ID
+    if (isValidUuid(userId)) {
+      // 1a. Try RPC delete first (if admin function is created in Supabase)
+      try {
+        const { data: rpcData, error: rpcError } = await client.rpc('delete_user_by_admin', { target_user_id: userId });
+        if (!rpcError && (rpcData as any)?.success !== false) {
+          return { success: true, error: null };
+        }
+      } catch {
+        // Ignore RPC failure and fallback to direct table deletion
       }
-    } catch {
-      // Ignore RPC failure and fallback to direct table deletion
+
+      // 1b. Delete associated student progress
+      await client
+        .from('student_progress')
+        .delete()
+        .eq('user_id', userId);
+
+      // 1c. Delete profile record
+      const { error } = await client
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+
+      if (error) {
+        console.warn('Error deleting profile from Supabase by id:', error.message);
+      }
     }
 
-    // 2. Delete associated student progress
-    await client
-      .from('student_progress')
-      .delete()
-      .eq('user_id', userId);
+    // 2. Also delete by email if email is provided (handles non-UUID local IDs or duplicate accounts)
+    if (userEmail && userEmail.trim()) {
+      const normalizedEmail = userEmail.trim().toLowerCase();
+      try {
+        const { data: matchingProfiles } = await client
+          .from('profiles')
+          .select('id')
+          .ilike('email', normalizedEmail);
 
-    // 3. Delete profile record
-    const { error } = await client
-      .from('profiles')
-      .delete()
-      .eq('id', userId);
-
-    if (error) {
-      console.warn('Error deleting profile from Supabase:', error.message);
-      return { success: false, error: error.message };
+        if (matchingProfiles && matchingProfiles.length > 0) {
+          for (const mp of matchingProfiles) {
+            await client.from('student_progress').delete().eq('user_id', mp.id);
+            await client.from('profiles').delete().eq('id', mp.id);
+          }
+        }
+      } catch (emailErr) {
+        console.warn('Error deleting profile by email from Supabase:', emailErr);
+      }
     }
 
     return { success: true, error: null };
@@ -691,24 +707,62 @@ export async function createTeacherProfileInDb(teacher: {
 /**
  * Update a user's role in Supabase (e.g. promoting to admin, assigning teacher)
  */
-export async function updateUserRoleInDb(userId: string, newRole: UserRole): Promise<{ success: boolean; error: string | null }> {
+export async function updateUserRoleInDb(userId: string, newRole: UserRole, userEmail?: string): Promise<{ success: boolean; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
     return { success: false, error: 'Supabase не настроен' };
   }
 
   try {
-    const { error } = await client
-      .from('profiles')
-      .update({ 
-        role: newRole, 
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', userId);
+    let updatedAny = false;
 
-    if (error) {
-      console.warn('Failed to update user role in Supabase:', error.message);
-      return { success: false, error: error.message };
+    // 1. If valid UUID, attempt update by ID
+    if (isValidUuid(userId)) {
+      // 1a. Try RPC function if configured
+      try {
+        const { data: rpcData, error: rpcErr } = await client.rpc('update_user_role_by_admin', {
+          target_user_id: userId,
+          new_role: newRole
+        });
+        if (!rpcErr && (rpcData as any)?.success !== false) {
+          return { success: true, error: null };
+        }
+      } catch {
+        // Fallback to table update
+      }
+
+      // 1b. Direct table update by id
+      const { error: idError, count } = await client
+        .from('profiles')
+        .update({ 
+          role: newRole, 
+          updated_at: new Date().toISOString() 
+        }, { count: 'exact' })
+        .eq('id', userId);
+
+      if (!idError && count && count > 0) {
+        updatedAny = true;
+      } else if (idError) {
+        console.warn('Failed to update user role by id in Supabase:', idError.message);
+      }
+    }
+
+    // 2. Also attempt update by email if provided
+    if (userEmail && userEmail.trim()) {
+      const normalizedEmail = userEmail.trim().toLowerCase();
+      const { error: emailError, count } = await client
+        .from('profiles')
+        .update({ 
+          role: newRole, 
+          updated_at: new Date().toISOString() 
+        }, { count: 'exact' })
+        .ilike('email', normalizedEmail);
+
+      if (!emailError && count && count > 0) {
+        updatedAny = true;
+      } else if (emailError) {
+        console.warn('Failed to update user role by email in Supabase:', emailError.message);
+      }
     }
 
     return { success: true, error: null };
@@ -721,25 +775,42 @@ export async function updateUserRoleInDb(userId: string, newRole: UserRole): Pro
 /**
  * Update a user's group and course in Supabase
  */
-export async function updateUserGroupInDb(userId: string, newGroup: string, course: number = 3): Promise<{ success: boolean; error: string | null }> {
+export async function updateUserGroupInDb(userId: string, newGroup: string, course: number = 3, userEmail?: string): Promise<{ success: boolean; error: string | null }> {
   const client = getSupabaseClient();
   if (!client) {
     return { success: false, error: 'Supabase не настроен' };
   }
 
   try {
-    const { error } = await client
-      .from('profiles')
-      .update({ 
-        group_name: newGroup, 
-        course, 
-        updated_at: new Date().toISOString() 
-      })
-      .eq('id', userId);
+    if (isValidUuid(userId)) {
+      const { error } = await client
+        .from('profiles')
+        .update({ 
+          group_name: newGroup, 
+          course, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
 
-    if (error) {
-      console.warn('Failed to update user group in Supabase:', error.message);
-      return { success: false, error: error.message };
+      if (error) {
+        console.warn('Failed to update user group by id in Supabase:', error.message);
+      }
+    }
+
+    if (userEmail && userEmail.trim()) {
+      const normalizedEmail = userEmail.trim().toLowerCase();
+      const { error: emailError } = await client
+        .from('profiles')
+        .update({ 
+          group_name: newGroup, 
+          course, 
+          updated_at: new Date().toISOString() 
+        })
+        .ilike('email', normalizedEmail);
+
+      if (emailError) {
+        console.warn('Failed to update user group by email in Supabase:', emailError.message);
+      }
     }
 
     return { success: true, error: null };
