@@ -203,3 +203,65 @@ exception when others then
   return jsonb_build_object('success', false, 'error', SQLERRM);
 end;
 $$;
+
+
+-- =========================================================================
+-- 10. Таблица сданных практических и лабораторных работ
+-- =========================================================================
+create table if not exists public.practical_submissions (
+  id text primary key,
+  student_id uuid references public.profiles(id) on delete cascade,
+  student_name text not null,
+  group_name text not null default '37В',
+  subject_id text not null,
+  subject_title text not null,
+  work_number integer not null,
+  work_title text not null,
+  content_html text not null default '',
+  submitted_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  status text not null default 'submitted' check (status in ('draft', 'submitted', 'graded', 'needs_revision')),
+  grade integer check (grade >= 1 and grade <= 10),
+  graded_at timestamp with time zone,
+  graded_by text,
+  teacher_feedback text
+);
+
+alter table public.practical_submissions enable row level security;
+
+-- Студенты видят свои работы, преподаватели и админы — все работы
+create policy "Студенты видят свои работы, преподаватели - группы"
+  on public.practical_submissions for select
+  to authenticated
+  using (
+    auth.uid() = student_id
+    or exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role in ('teacher', 'admin')
+    )
+  );
+
+-- Студенты могут отправлять и обновлять свои работы
+create policy "Студенты могут отправлять свои работы"
+  on public.practical_submissions for all
+  to authenticated
+  using (
+    auth.uid() = student_id
+    or exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role in ('teacher', 'admin')
+    )
+  )
+  with check (
+    auth.uid() = student_id
+    or exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role in ('teacher', 'admin')
+    )
+  );
+
+create index if not exists idx_practical_submissions_group on public.practical_submissions(group_name, subject_id);
+create index if not exists idx_practical_submissions_student on public.practical_submissions(student_id);

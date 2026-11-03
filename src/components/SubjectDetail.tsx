@@ -18,7 +18,8 @@ import { Subject, Topic, TopicStatus, StudentProgress, User, PracticalWork } fro
 import { SkillTree } from './SkillTree';
 import { TopicModal } from './TopicModal';
 import { PracticalReportEditor } from './PracticalReportEditor';
-import { getStudentPracticalSubmission } from '../lib/practicalSubmissionRegistry';
+import { getStudentPracticalSubmission, mergeRemoteSubmissions } from '../lib/practicalSubmissionRegistry';
+import { fetchStudentPracticalSubmissionsFromDb, isSupabaseConfigured } from '../lib/supabase';
 
 interface SubjectDetailProps {
   subject: Subject;
@@ -54,6 +55,26 @@ export const SubjectDetail: React.FC<SubjectDetailProps> = ({
   const [showFastForwardModal, setShowFastForwardModal] = useState<boolean>(false);
   const [fastForwardTopicId, setFastForwardTopicId] = useState<string | undefined>(undefined);
   const [activePracticalForEditor, setActivePracticalForEditor] = useState<PracticalWork | null>(null);
+  const [practicalsVersion, setPracticalsVersion] = useState<number>(0);
+
+  useEffect(() => {
+    if (isSupabaseConfigured() && currentUser?.id) {
+      fetchStudentPracticalSubmissionsFromDb(currentUser.id, subject.id).then((remote) => {
+        if (remote && remote.length > 0) {
+          mergeRemoteSubmissions(remote);
+          setPracticalsVersion(v => v + 1);
+        }
+      });
+    }
+  }, [currentUser?.id, subject.id]);
+
+  useEffect(() => {
+    const handleUpdated = () => {
+      setPracticalsVersion(v => v + 1);
+    };
+    window.addEventListener('study_os_practical_submissions_updated', handleUpdated);
+    return () => window.removeEventListener('study_os_practical_submissions_updated', handleUpdated);
+  }, []);
 
   // Compute progress statistics
   const isTeacherOrAdmin = currentUser.role === 'teacher' || currentUser.role === 'admin';

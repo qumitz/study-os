@@ -31,8 +31,10 @@ import {
 import { PracticalWork, PracticalSubmission, User } from '../types';
 import { 
   getStudentPracticalSubmission, 
-  savePracticalSubmission 
+  savePracticalSubmission,
+  mergeRemoteSubmissions
 } from '../lib/practicalSubmissionRegistry';
+import { syncPracticalSubmissionToDb, fetchStudentPracticalSubmissionsFromDb, isSupabaseConfigured } from '../lib/supabase';
 import { compressImage, extractImageFromClipboard } from '../lib/imageUtils';
 import { TableInsertModal } from './TableInsertModal';
 import { TableContextMenu, ActiveTableInfo } from './TableContextMenu';
@@ -109,7 +111,7 @@ export const PracticalReportEditor: React.FC<PracticalReportEditorProps> = ({
     `;
   };
 
-  // Initialize editor content
+  // Initialize editor content and sync from cloud
   useEffect(() => {
     if (editorRef.current) {
       if (submission && submission.contentHtml) {
@@ -118,6 +120,22 @@ export const PracticalReportEditor: React.FC<PracticalReportEditorProps> = ({
         editorRef.current.innerHTML = generateTitleBlockHtml();
       }
       updateWordCount();
+    }
+
+    // Check cloud for existing submission on other devices
+    if (isSupabaseConfigured() && currentUser?.id) {
+      fetchStudentPracticalSubmissionsFromDb(currentUser.id, subjectId).then((remote) => {
+        const remoteSub = remote.find(s => s.workNumber === work.number);
+        if (remoteSub && remoteSub.contentHtml) {
+          mergeRemoteSubmissions([remoteSub]);
+          setSubmission(remoteSub);
+          setStatus(remoteSub.status);
+          if (editorRef.current && (!submission || !submission.contentHtml || remoteSub.status === 'graded')) {
+            editorRef.current.innerHTML = remoteSub.contentHtml;
+            updateWordCount();
+          }
+        }
+      });
     }
   }, []);
 
@@ -569,7 +587,7 @@ console.log("Практическая работа выполнена");</code><
   };
 
   // Submit to Teacher for grading
-  const handleSubmitToTeacher = () => {
+  const handleSubmitToTeacher = async () => {
     if (!editorRef.current) return;
     const confirmed = window.confirm(
       'Отправить готовую работу преподавателю Селедцову А.И. на проверку?'
@@ -600,9 +618,21 @@ console.log("Практическая работа выполнена");</code><
     setSubmission(saved);
     setStatus('submitted');
     setLastSaved(new Date().toLocaleTimeString());
-    setIsSaving(false);
 
-    alert('Работа успешно отправлена преподавателю на проверку!');
+    let alertMessage = 'Работа успешно отправлена преподавателю на проверку!';
+    if (isSupabaseConfigured()) {
+      try {
+        const ok = await syncPracticalSubmissionToDb(payload);
+        if (ok) {
+          alertMessage = 'Работа успешно отправлена в облако! Преподаватель сразу увидит её со своего телефона или компьютера.';
+        }
+      } catch (err) {
+        console.warn('Supabase submission sync error:', err);
+      }
+    }
+
+    setIsSaving(false);
+    alert(alertMessage);
     if (onSubmitted) onSubmitted();
   };
 

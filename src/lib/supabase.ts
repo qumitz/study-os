@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User as SupabaseAuthUser } from '@supabase/supabase-js';
-import { User, UserRole, StudentProgress, TopicStatus, StudentGradeRecord } from '../types';
+import { User, UserRole, StudentProgress, TopicStatus, StudentGradeRecord, PracticalSubmission } from '../types';
 
 // Default project credentials for Study OS (public client config)
 const DEFAULT_SUPABASE_URL = 'https://poxzqzsralyqydbgazoy.supabase.co';
@@ -838,4 +838,317 @@ export async function updateUserGroupInDb(userId: string, newGroup: string, cour
     console.error('Exception updating user group:', err);
     return { success: false, error: err.message || 'Ошибка обновления группы' };
   }
+}
+
+
+/* =========================================================================
+   PRACTICAL WORKS CLOUD SYNCHRONIZATION
+   ========================================================================= */
+
+/**
+ * Sync a practical submission to Supabase (dual-target: practical_submissions table & student_progress)
+ */
+export async function syncPracticalSubmissionToDb(submission: PracticalSubmission): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  let success = false;
+
+  // 1. Resolve student UUID
+  let targetUserId = submission.studentId;
+  const isUuid = isValidUuid(targetUserId);
+  if (!isUuid) {
+    try {
+      const { data: { user: authUser } } = await client.auth.getUser();
+      if (authUser && authUser.id) {
+        targetUserId = authUser.id;
+      }
+    } catch {}
+  }
+
+  // 2. Try saving to dedicated table 'practical_submissions' if it exists
+  try {
+    const { error: tableError } = await client
+      .from('practical_submissions')
+      .upsert({
+        id: submission.id,
+        student_id: isValidUuid(targetUserId) ? targetUserId : null,
+        student_name: submission.studentName,
+        group_name: submission.group,
+        subject_id: submission.subjectId,
+        subject_title: submission.subjectTitle,
+        work_number: submission.workNumber,
+        work_title: submission.workTitle,
+        content_html: submission.contentHtml,
+        submitted_at: submission.submittedAt,
+        updated_at: new Date().toISOString(),
+        status: submission.status,
+        grade: submission.grade ?? null,
+        graded_by: submission.gradedBy ?? null,
+        graded_at: submission.gradedAt ?? null,
+        teacher_feedback: submission.teacherFeedback ?? null
+      }, { onConflict: 'id' });
+
+    if (!tableError) {
+      success = true;
+    }
+  } catch {
+    // Table might not exist yet in Supabase schema
+  }
+
+  // 3. Fallback/Dual storage inside 'student_progress' (guaranteed to exist in DB)
+  if (isValidUuid(targetUserId)) {
+    try {
+      const { data: existingRow } = await client
+        .from('student_progress')
+        .select('topic_statuses, grades')
+        .eq('user_id', targetUserId)
+        .eq('subject_id', submission.subjectId)
+        .maybeSingle();
+
+      const existingStatuses = (existingRow?.topic_statuses as Record<string, any>) || {};
+      const existingGrades = (existingRow?.grades as Record<string, any>) || {};
+      const existingPracticals = (existingGrades._practicals as Record<string, PracticalSubmission>) || {};
+
+      const nextPracticals = {
+        ...existingPracticals,
+        [submission.workNumber]: {
+          ...submission,
+          studentId: targetUserId,
+          updatedAt: new Date().toISOString()
+        }
+      };
+
+      const nextGrades = {
+        ...existingGrades,
+        _practicals: nextPracticals
+      };
+
+      // If graded, also update topic status for related topic
+      const nextStatuses = { ...existingStatuses };
+      if (submission.status === 'graded') {
+        nextStatuses[`practical-${submission.workNumber}`] = 'completed';
+      }
+
+      const { error: progError } = await client
+        .from('student_progress')
+        .upsert({
+          user_id: targetUserId,
+          subject_id: submission.subjectId,
+          topic_statuses: nextStatuses,
+          grades: nextGrades,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,subject_id' });
+
+      if (!progError) {
+        success = true;
+      }
+    } catch (e) {
+      console.warn('Failed to sync practical to student_progress:', e);
+    }
+  }
+
+  return success;
+}
+
+/**
+ * Fetch all practical submissions for a group (and optional subject) from Supabase
+ */
+export async function fetchGroupPracticalSubmissionsFromDb(
+  groupName: string,
+  subjectId?: string
+): Promise<PracticalSubmission[]> {
+  const client = getSupabaseClient();
+  if (!client) return [];
+
+  const resultsMap = new Map<string, PracticalSubmission>();
+
+  // Source A: Try dedicated 'practical_submissions' table
+  try {
+    let query = client.from('practical_submissions').select('*');
+    if (groupName && groupName !== 'Все группы') {
+      query = query.eq('group_name', groupName);
+    }
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
+    }
+
+    const { data, error } = await query;
+    if (!error && Array.isArray(data)) {
+      data.forEach((row: any) => {
+        const sub: PracticalSubmission = {
+          id: row.id,
+          studentId: row.student_id,
+          studentName: row.student_name,
+          group: row.group_name,
+          subjectId: row.subject_id,
+          subjectTitle: row.subject_title,
+          workNumber: Number(row.work_number),
+          workTitle: row.work_title,
+          contentHtml: row.content_html || '',
+          submittedAt: row.submitted_at,
+          updatedAt: row.updated_at,
+          status: row.status,
+          grade: row.grade,
+          gradedAt: row.graded_at,
+          gradedBy: row.graded_by,
+          teacherFeedback: row.teacher_feedback
+        };
+        resultsMap.set(sub.id, sub);
+      });
+    }
+  } catch {}
+
+  // Source B: Read from student_progress.grades._practicals
+  try {
+    let profQuery = client.from('profiles').select('id, name, group_name').eq('role', 'student');
+    if (groupName && groupName !== 'Все группы') {
+      profQuery = profQuery.eq('group_name', groupName);
+    }
+    const { data: profiles } = await profQuery;
+
+    if (profiles && profiles.length > 0) {
+      const userIds = profiles.map(p => p.id);
+      let progQuery = client.from('student_progress').select('user_id, subject_id, grades').in('user_id', userIds);
+      if (subjectId) {
+        progQuery = progQuery.eq('subject_id', subjectId);
+      }
+      const { data: progressRows } = await progQuery;
+
+      if (progressRows) {
+        progressRows.forEach((row: any) => {
+          const practicals = row.grades?._practicals;
+          if (practicals && typeof practicals === 'object') {
+            const studentProfile = profiles.find(p => p.id === row.user_id);
+            Object.values(practicals).forEach((sub: any) => {
+              if (sub && sub.workNumber) {
+                const normalized: PracticalSubmission = {
+                  id: sub.id || `sub-${row.user_id}-${row.subject_id}-${sub.workNumber}`,
+                  studentId: row.user_id,
+                  studentName: studentProfile?.name || sub.studentName || 'Студент',
+                  group: studentProfile?.group_name || sub.group || groupName,
+                  subjectId: row.subject_id,
+                  subjectTitle: sub.subjectTitle || '',
+                  workNumber: Number(sub.workNumber),
+                  workTitle: sub.workTitle || `Практическая работа №${sub.workNumber}`,
+                  contentHtml: sub.contentHtml || '',
+                  submittedAt: sub.submittedAt || new Date().toISOString(),
+                  updatedAt: sub.updatedAt || new Date().toISOString(),
+                  status: sub.status || 'submitted',
+                  grade: sub.grade,
+                  gradedAt: sub.gradedAt,
+                  gradedBy: sub.gradedBy,
+                  teacherFeedback: sub.teacherFeedback
+                };
+
+                const existing = resultsMap.get(normalized.id);
+                if (!existing || new Date(normalized.updatedAt) > new Date(existing.updatedAt)) {
+                  resultsMap.set(normalized.id, normalized);
+                }
+              }
+            });
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to fetch practicals from student_progress:', e);
+  }
+
+  return Array.from(resultsMap.values());
+}
+
+/**
+ * Fetch a student's own practical submissions from Supabase
+ */
+export async function fetchStudentPracticalSubmissionsFromDb(
+  studentId: string,
+  subjectId?: string
+): Promise<PracticalSubmission[]> {
+  const client = getSupabaseClient();
+  if (!client) return [];
+
+  const resultsMap = new Map<string, PracticalSubmission>();
+
+  // Source A: Try table
+  try {
+    let query = client.from('practical_submissions').select('*');
+    if (isValidUuid(studentId)) {
+      query = query.eq('student_id', studentId);
+    }
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
+    }
+    const { data } = await query;
+    if (Array.isArray(data)) {
+      data.forEach((row: any) => {
+        const sub: PracticalSubmission = {
+          id: row.id,
+          studentId: row.student_id,
+          studentName: row.student_name,
+          group: row.group_name,
+          subjectId: row.subject_id,
+          subjectTitle: row.subject_title,
+          workNumber: Number(row.work_number),
+          workTitle: row.work_title,
+          contentHtml: row.content_html || '',
+          submittedAt: row.submitted_at,
+          updatedAt: row.updated_at,
+          status: row.status,
+          grade: row.grade,
+          gradedAt: row.graded_at,
+          gradedBy: row.graded_by,
+          teacherFeedback: row.teacher_feedback
+        };
+        resultsMap.set(sub.id, sub);
+      });
+    }
+  } catch {}
+
+  // Source B: Read student_progress
+  if (isValidUuid(studentId)) {
+    try {
+      let progQuery = client.from('student_progress').select('user_id, subject_id, grades').eq('user_id', studentId);
+      if (subjectId) {
+        progQuery = progQuery.eq('subject_id', subjectId);
+      }
+      const { data: rows } = await progQuery;
+      if (rows) {
+        rows.forEach((row: any) => {
+          const practicals = row.grades?._practicals;
+          if (practicals && typeof practicals === 'object') {
+            Object.values(practicals).forEach((sub: any) => {
+              if (sub && sub.workNumber) {
+                const normalized: PracticalSubmission = {
+                  id: sub.id || `sub-${studentId}-${row.subject_id}-${sub.workNumber}`,
+                  studentId: studentId,
+                  studentName: sub.studentName || 'Студент',
+                  group: sub.group || '37В',
+                  subjectId: row.subject_id,
+                  subjectTitle: sub.subjectTitle || '',
+                  workNumber: Number(sub.workNumber),
+                  workTitle: sub.workTitle || `Практическая работа №${sub.workNumber}`,
+                  contentHtml: sub.contentHtml || '',
+                  submittedAt: sub.submittedAt || new Date().toISOString(),
+                  updatedAt: sub.updatedAt || new Date().toISOString(),
+                  status: sub.status || 'submitted',
+                  grade: sub.grade,
+                  gradedAt: sub.gradedAt,
+                  gradedBy: sub.gradedBy,
+                  teacherFeedback: sub.teacherFeedback
+                };
+
+                const existing = resultsMap.get(normalized.id);
+                if (!existing || new Date(normalized.updatedAt) > new Date(existing.updatedAt)) {
+                  resultsMap.set(normalized.id, normalized);
+                }
+              }
+            });
+          }
+        });
+      }
+    } catch {}
+  }
+
+  return Array.from(resultsMap.values());
 }

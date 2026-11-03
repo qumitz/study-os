@@ -39,13 +39,15 @@ import {
 } from '../lib/studentRegistry';
 import { 
   isSupabaseConfigured, 
-  fetchGroupStudentsFromDb 
+  fetchGroupStudentsFromDb,
+  fetchGroupPracticalSubmissionsFromDb
 } from '../lib/supabase';
 import { getAvailableGroups } from '../lib/groupRegistry';
 import { 
   getGroupPracticalSubmissions, 
   gradePracticalSubmission, 
-  requestRevisionPracticalSubmission 
+  requestRevisionPracticalSubmission,
+  mergeRemoteSubmissions
 } from '../lib/practicalSubmissionRegistry';
 
 export interface TeacherDashboardProps {
@@ -201,11 +203,48 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [reviewFeedbackInput, setReviewFeedbackInput] = useState<string>('');
   const [syncGradeToJournalDate, setSyncGradeToJournalDate] = useState<boolean>(true);
 
-  // Submissions list for active group & subject
+  // Submissions list for active group & subject (real-time cloud synced)
   const [submissionsVersion, setSubmissionsVersion] = useState<number>(0);
-  const groupSubmissions = useMemo(() => {
+  const [groupSubmissions, setGroupSubmissions] = useState<PracticalSubmission[]>(() => {
     return getGroupPracticalSubmissions(activeGroup, activeSubject.id);
-  }, [activeGroup, activeSubject.id, submissionsVersion]);
+  });
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState<boolean>(false);
+
+  const loadSubmissions = async () => {
+    const local = getGroupPracticalSubmissions(activeGroup, activeSubject.id);
+    setGroupSubmissions(local);
+
+    if (isSupabaseConfigured()) {
+      setIsLoadingSubmissions(true);
+      try {
+        const remote = await fetchGroupPracticalSubmissionsFromDb(activeGroup, activeSubject.id);
+        if (remote && remote.length > 0) {
+          const merged = mergeRemoteSubmissions(remote);
+          setGroupSubmissions(merged.filter(s => {
+            const matchGroup = !activeGroup || activeGroup === 'Все группы' || s.group === activeGroup;
+            const matchSubj = !activeSubject.id || s.subjectId === activeSubject.id;
+            return matchGroup && matchSubj;
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to load practical submissions from DB:', err);
+      } finally {
+        setIsLoadingSubmissions(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [activeGroup, activeSubjectId]);
+
+  useEffect(() => {
+    const handleSubmissionsUpdated = () => {
+      loadSubmissions();
+    };
+    window.addEventListener('study_os_practical_submissions_updated', handleSubmissionsUpdated);
+    return () => window.removeEventListener('study_os_practical_submissions_updated', handleSubmissionsUpdated);
+  }, [activeGroup, activeSubjectId]);
 
   const pendingSubmissionsCount = useMemo(() => {
     return groupSubmissions.filter(s => s.status === 'submitted').length;
@@ -1017,6 +1056,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {activeSubject.title} • Проверка отчётов, оформленных студентами во встроенном текстовом редакторе
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={loadSubmissions}
+              disabled={isLoadingSubmissions}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1A1E24] text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+              title="Обновить список работ из облачной базы данных"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isLoadingSubmissions ? 'animate-spin text-blue-600' : ''}`} />
+              <span>{isLoadingSubmissions ? 'Загрузка...' : 'Обновить из облака'}</span>
+            </button>
           </div>
 
           {groupSubmissions.length === 0 ? (
