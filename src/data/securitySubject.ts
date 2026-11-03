@@ -3,6 +3,7 @@ import { Subject } from '../types';
 export const securitySubject: Subject = {
   id: 'secbasics',
   title: 'Основы информационной безопасности',
+  shortTitle: 'Информ. безопасность',
   code: '2-40 02 02 / 2-38 01 31',
   subtitle: 'Информационная безопасность • 3 курс',
   department: 'Лидский колледж УО «ГрГУ им. Янки Купалы»',

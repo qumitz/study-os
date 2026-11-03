@@ -3,7 +3,8 @@ import { Subject } from '../types';
 export const microprocessorSubject: Subject = {
   "id": "pms",
   "title": "Программирование микропроцессорных систем",
-  "code": "5-04-0713-01 / 36в",
+  "shortTitle": "ПМС",
+  "code": "5-04-0713-01",
   "subtitle": "Архитектура AVR, STM32, Embedded C, периферия MCU • 142 ч (56 т. / 86 пр.)",
   "department": "Лидский колледж УО «ГрГУ им. Янки Купалы»",
   "teacher": "Селедцов Александр Игоревич",

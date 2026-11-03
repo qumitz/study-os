@@ -139,12 +139,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleConfirmDeleteGroup = () => {
+  const handleConfirmDeleteGroup = async () => {
     if (!groupToDelete) return;
     try {
+      const deletedName = groupToDelete.name;
       const updated = deleteCollegeGroup(groupToDelete.id);
       setCollegeGroups(updated);
-      showToast(`Группа ${groupToDelete.name} удалена`, 'success');
+
+      // Reassign any students belonging to this group to base group '37В'
+      const affectedUsers = usersList.filter(u => u.group === deletedName);
+      if (affectedUsers.length > 0) {
+        for (const u of affectedUsers) {
+          await handleUserGroupChange(u, '37В');
+        }
+      }
+
+      showToast(`Группа ${deletedName} удалена`, 'success');
       setGroupToDelete(null);
     } catch (err: any) {
       showToast(err.message || 'Ошибка удаления группы', 'error');
@@ -293,6 +303,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   useEffect(() => {
     loadUsers();
   }, [hasSupabase]);
+
+  useEffect(() => {
+    const handleGroupsUpdated = () => {
+      setCollegeGroups(getAvailableGroups());
+    };
+    window.addEventListener('study_os_groups_updated', handleGroupsUpdated);
+    return () => window.removeEventListener('study_os_groups_updated', handleGroupsUpdated);
+  }, []);
 
   // Filtered users list
   const filteredUsers = useMemo(() => {
@@ -1224,8 +1242,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center font-bold text-xs shrink-0">
-                          {subj.code || 'ПР'}
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center font-bold text-xs shrink-0 px-1 text-center">
+                          {subj.shortTitle || (subj.title ? subj.title.slice(0, 4).toUpperCase() : 'ПР')}
                         </div>
                         <div>
                           <h3 className="text-sm font-bold text-[#111827] dark:text-[#F3F3EF] leading-snug">
@@ -1360,7 +1378,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               key={sId}
                               className="px-2 py-0.5 rounded-md text-[11px] bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium"
                             >
-                              {subj ? subj.shortTitle || subj.code || subj.title : sId}
+                              {subj ? subj.shortTitle || subj.title : sId}
                             </span>
                           );
                         })

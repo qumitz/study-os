@@ -3,6 +3,7 @@ import { Subject } from '../types';
 export const maintenanceSubject: Subject = {
   "id": "tesvt",
   "title": "Техническая эксплуатация средств вычислительной техники",
+  "shortTitle": "ТЭСВТ",
   "code": "5-04-0713-01",
   "subtitle": "Техническая эксплуатация СВТ • 3 курс",
   "department": "Лидский колледж УО «ГрГУ им. Янки Купалы»",

@@ -35,6 +35,7 @@ interface DashboardProps {
 const getSubjectMeta = (subjectId: string) => {
   switch (subjectId) {
     case 'secbasics':
+    case 'security':
       return {
         icon: ShieldCheck,
         badgeBg: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
@@ -42,6 +43,7 @@ const getSubjectMeta = (subjectId: string) => {
         tag: 'ИБ и защита'
       };
     case 'pms':
+    case 'microprocessor':
       return {
         icon: Cpu,
         badgeBg: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
@@ -49,12 +51,14 @@ const getSubjectMeta = (subjectId: string) => {
         tag: 'Микроконтроллеры'
       };
     case 'tesvt':
+    case 'maintenance':
       return {
         icon: Wrench,
         badgeBg: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
         iconBg: 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400',
         tag: 'ТО и Ремонт'
       };
+    case 'network':
     case 'stoi':
       return {
         icon: Network,
@@ -63,12 +67,14 @@ const getSubjectMeta = (subjectId: string) => {
         tag: 'Сети и маршрутизация'
       };
     case 'pspi':
+    case 'transmission':
       return {
         icon: Radio,
         badgeBg: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300',
         iconBg: 'bg-cyan-100 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400',
         tag: 'Телекоммуникации'
       };
+    case 'mobile':
     case 'rmp':
       return {
         icon: Smartphone,
@@ -76,6 +82,7 @@ const getSubjectMeta = (subjectId: string) => {
         iconBg: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400',
         tag: 'Android & Kotlin'
       };
+    case 'cad':
     case 'sapr':
       return {
         icon: Compass,

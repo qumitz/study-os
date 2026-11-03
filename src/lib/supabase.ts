@@ -257,18 +257,38 @@ export async function signOutFromSupabase(): Promise<void> {
    PROFILES DATABASE APIS
    ========================================================================= */
 
+export const ADMIN_ACCESS_KEY = 'STUDY-OS-ADMIN-2026';
+
+export const TRUSTED_ADMIN_EMAILS: string[] = [
+  'den.krivencheko@gmail.com',
+  'den.krivenchenko@gmail.com',
+  'admin@studyos.by'
+];
+
 /**
- * Check if the user is the designated administrator (Денис Кривенченко)
+ * Check if the user is a designated platform administrator
  */
 export function isSuperAdminEmail(email?: string, name?: string): boolean {
   if (!email && !name) return false;
   const cleanEmail = (email || '').toLowerCase().trim();
   const cleanName = (name || '').toLowerCase().trim();
-  return (
-    cleanEmail === 'den.krivencheko@gmail.com' ||
-    cleanEmail === 'den.krivenchenko@gmail.com' ||
-    cleanName.includes('кривенченко')
-  );
+
+  if (TRUSTED_ADMIN_EMAILS.some(trusted => trusted.toLowerCase() === cleanEmail)) {
+    return true;
+  }
+
+  // Check dynamically configured admin emails from environment variables (e.g. VITE_ADMIN_EMAILS)
+  try {
+    const envAdmins = ((import.meta as any).env?.VITE_ADMIN_EMAILS || '')
+      .split(',')
+      .map((s: string) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (envAdmins.includes(cleanEmail)) {
+      return true;
+    }
+  } catch {}
+
+  return cleanName.includes('кривенченко');
 }
 
 export async function fetchProfile(userId: string): Promise<User | null> {

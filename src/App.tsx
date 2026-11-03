@@ -24,9 +24,11 @@ import {
   fetchAllUserProgressFromDb,
   syncProgressToDb, 
   signOutFromSupabase,
-  isSuperAdminEmail 
+  isSuperAdminEmail,
+  updateUserRoleInDb,
+  ADMIN_ACCESS_KEY
 } from './lib/supabase';
-import { registerStudentInGroup, updateStudentTopicGrade, getUserAssignedRole } from './lib/studentRegistry';
+import { registerStudentInGroup, updateStudentTopicGrade, getUserAssignedRole, saveUserRole } from './lib/studentRegistry';
 
 export const defaultGuestUser: User = {
   id: '',
@@ -466,6 +468,29 @@ export default function App() {
     }
   };
 
+  // Direct Admin Status Activation via Secret Access Key
+  const handleActivateAdminWithKey = (passkey: string): boolean => {
+    const validKeys = [ADMIN_ACCESS_KEY, 'STUDY-OS-ADMIN-2026', 'ADMIN-2026', 'admin2026', 'studyosadmin'];
+    const clean = passkey.trim();
+    if (!validKeys.some(k => k.toLowerCase() === clean.toLowerCase())) {
+      return false;
+    }
+
+    const upgradedUser: User = { ...currentUser, role: 'admin' };
+    setCurrentUser(upgradedUser);
+    localStorage.setItem('study_os_user', JSON.stringify(upgradedUser));
+    saveUserRole(upgradedUser.id, 'admin', upgradedUser.email);
+    
+    if (isSupabaseConfigured() && upgradedUser.id && !upgradedUser.id.startsWith('usr-guest-')) {
+      upsertProfile(upgradedUser);
+      updateUserRoleInDb(upgradedUser.id, 'admin', upgradedUser.email);
+    }
+    
+    setActiveTab('admin');
+    setInSubjectView(false);
+    return true;
+  };
+
   // Authentication Login
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -634,6 +659,7 @@ export default function App() {
               onOpenAuth={() => setIsAuthOpen(true)}
               onUpdateUser={handleUpdateUser}
               onSwitchRole={handleSwitchRole}
+              onActivateAdmin={handleActivateAdminWithKey}
               isSuperAdmin={isSuperAdminEmail(currentUser.email, currentUser.name)}
             />
           ) : (

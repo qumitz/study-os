@@ -3,7 +3,8 @@ import { Subject } from '../types';
 export const mobileSubject: Subject = {
   "id": "mobile",
   "title": "Разработка мобильных приложений",
-  "code": "5-04-0713-01 / 35в",
+  "shortTitle": "Моб. приложения",
+  "code": "5-04-0713-01",
   "subtitle": "Разработка мобильных приложений для ОС Android • 50 ч (20 теор. / 30 практ.)",
   "department": "Лидский колледж УО «ГрГУ им. Янки Купалы»",
   "teacher": "Селедцов Александр Игоревич",

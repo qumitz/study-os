@@ -3,6 +3,7 @@ import { Subject } from '../types';
 export const tsiSubject: Subject = {
   "id": "tsi",
   "title": "Технические средства информатизации",
+  "shortTitle": "ТСИ",
   "code": "5-04-0713-01",
   "subtitle": "Аппаратная архитектура современных ПК • 3 курс",
   "department": "Лидский колледж УО «ГрГУ им. Янки Купалы»",

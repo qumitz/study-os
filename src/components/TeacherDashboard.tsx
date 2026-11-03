@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { FastForwardTopicModal } from './FastForwardTopicModal';
 import { getGroupCheckpoint, GroupCurriculumCheckpoint } from '../lib/curriculumSync';
-import { StudentGradeRecord, Subject, Topic, PracticalWork, PracticalSubmission } from '../types';
+import { StudentGradeRecord, Subject, Topic, PracticalWork, PracticalSubmission, CollegeGroup } from '../types';
 import { 
   getRegisteredStudentsForGroup, 
   saveGroupStudents, 
@@ -58,16 +58,38 @@ export interface TeacherDashboardProps {
 // Helper: Format subject short title for college tabs
 const getSubjectFriendlyName = (s: Subject): string => {
   const map: Record<string, string> = {
-    cad: 'САПР',
-    network: 'Сетевые технологии',
-    maintenance: 'Техническая экспл.',
-    microprocessor: 'Микропроцессоры',
-    mobile: 'Моб. приложения',
-    transmission: 'Технологии передачи',
     secbasics: 'Информ. безопасность',
-    tsi: 'Техн. средства информ.'
+    security: 'Информ. безопасность',
+    pms: 'ПМС',
+    microprocessor: 'ПМС',
+    tesvt: 'ТЭСВТ',
+    maintenance: 'ТЭСВТ',
+    network: 'Сетевые технологии',
+    stoi: 'Сетевые технологии',
+    pspi: 'ПСПИ',
+    transmission: 'ПСПИ',
+    mobile: 'Моб. приложения',
+    rmp: 'Моб. приложения',
+    cad: 'САПР',
+    sapr: 'САПР',
+    tsi: 'ТСИ'
   };
-  return map[s.id] || s.shortTitle || s.code || s.title;
+  if (map[s.id]) return map[s.id];
+  if (s.shortTitle && !s.shortTitle.startsWith('5-04') && !s.shortTitle.startsWith('2-40')) {
+    return s.shortTitle;
+  }
+  if (s.title) {
+    if (s.title.includes('микропроцессор')) return 'ПМС';
+    if (s.title.includes('эксплуатаци')) return 'ТЭСВТ';
+    if (s.title.includes('передачи информации')) return 'ПСПИ';
+    if (s.title.includes('проектирован')) return 'САПР';
+    if (s.title.includes('информатизаци')) return 'ТСИ';
+    if (s.title.includes('безопасност')) return 'Информ. безопасность';
+    if (s.title.includes('мобильн')) return 'Моб. приложения';
+    if (s.title.includes('сетев')) return 'Сетевые технологии';
+    return s.title.length > 24 ? s.title.slice(0, 22) + '...' : s.title;
+  }
+  return s.code;
 };
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
@@ -77,17 +99,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onSelectSubject
 }) => {
   // Available groups
-  const availableGroups = getAvailableGroups();
+  const [availableGroups, setAvailableGroups] = useState<CollegeGroup[]>(() => getAvailableGroups());
   const [activeGroup, setActiveGroup] = useState<string>(() => {
     if (currentUserGroup && currentUserGroup !== 'Все группы') {
       return currentUserGroup;
     }
     const saved = localStorage.getItem('study_os_teacher_active_group');
-    if (saved && availableGroups.some(g => g.name === saved)) {
+    const initialGroups = getAvailableGroups();
+    if (saved && initialGroups.some(g => g.name === saved)) {
       return saved;
     }
-    return availableGroups[0]?.name || '37В';
+    return initialGroups[0]?.name || '37В';
   });
+
+  useEffect(() => {
+    const handleGroupsUpdated = () => {
+      const updated = getAvailableGroups();
+      setAvailableGroups(updated);
+      if (!updated.some(g => g.name === activeGroup)) {
+        setActiveGroup(updated[0]?.name || '37В');
+      }
+    };
+    window.addEventListener('study_os_groups_updated', handleGroupsUpdated);
+    return () => window.removeEventListener('study_os_groups_updated', handleGroupsUpdated);
+  }, [activeGroup]);
 
   const handleGroupChange = (groupName: string) => {
     setActiveGroup(groupName);
