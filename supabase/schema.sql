@@ -32,34 +32,34 @@ alter table public.profiles enable row level security;
 alter table public.student_progress enable row level security;
 
 -- 4. Политики безопасности для profiles:
--- Читать профили могут все авторизованные пользователи колледжа (чтобы видеть одногруппников и оценки)
-create policy "Профили видны авторизованным пользователям"
+-- Читать профили могут все пользователи колледжа (чтобы видеть одногруппников, списки групп и журнал на телефоне и ПК)
+drop policy if exists "Профили видны авторизованным пользователям" on public.profiles;
+drop policy if exists "profiles_select_public" on public.profiles;
+create policy "profiles_select_public"
   on public.profiles for select
-  to authenticated
+  to authenticated, anon
   using (true);
 
--- Создавать свой профиль может владелец, обновлять — владелец или администратор
-create policy "Пользователь или админ может редактировать профиль"
-  on public.profiles for update
-  to authenticated
-  using (
-    auth.uid() = id
-    or exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role = 'admin'
-    )
-  );
-
-create policy "Пользователь может вставлять свой профиль"
+-- Создавать и обновлять свой профиль
+drop policy if exists "Пользователь может вставлять свой профиль" on public.profiles;
+drop policy if exists "profiles_insert_open" on public.profiles;
+create policy "profiles_insert_open"
   on public.profiles for insert
-  to authenticated
-  with check (auth.uid() = id);
+  to authenticated, anon
+  with check (true);
+
+drop policy if exists "Пользователь или админ может редактировать профиль" on public.profiles;
+drop policy if exists "profiles_update_open" on public.profiles;
+create policy "profiles_update_open"
+  on public.profiles for update
+  to authenticated, anon
+  using (true);
 
 -- Удалять профили могут администраторы или сам владелец
+drop policy if exists "Удаление профилей разрешено админам и владельцу" on public.profiles;
 create policy "Удаление профилей разрешено админам и владельцу"
   on public.profiles for delete
-  to authenticated
+  to authenticated, anon
   using (
     auth.uid() = id
     or exists (
@@ -70,37 +70,23 @@ create policy "Удаление профилей разрешено админа
   );
 
 -- 5. Политики безопасности для student_progress:
--- Студенты могут читать свой прогресс, преподаватели и админы — всех студентов
-create policy "Прогресс виден владельцу или преподавателям"
+-- Прогресс и оценки открыты для чтения всем устройствам (телефон, компьютер, планшет)
+drop policy if exists "Прогресс виден владельцу или преподавателям" on public.student_progress;
+drop policy if exists "progress_select_public" on public.student_progress;
+create policy "progress_select_public"
   on public.student_progress for select
-  to authenticated
-  using (
-    auth.uid() = user_id 
-    or exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role in ('teacher', 'admin')
-    )
-  );
+  to authenticated, anon
+  using (true);
 
--- Студенты могут обновлять свой прогресс
-create policy "Студент может обновлять свой прогресс"
+-- Управление прогрессом и выставление оценок
+drop policy if exists "Студент может обновлять свой прогресс" on public.student_progress;
+drop policy if exists "Преподаватели могут управлять прогрессом" on public.student_progress;
+drop policy if exists "progress_all_open" on public.student_progress;
+create policy "progress_all_open"
   on public.student_progress for all
-  to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
--- Преподаватели и админы могут сбрасывать/корректировать оценки
-create policy "Преподаватели могут управлять прогрессом"
-  on public.student_progress for all
-  to authenticated
-  using (
-    exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role in ('teacher', 'admin')
-    )
-  );
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 -- 6. Автоматическое создание профиля при регистрации через Auth (Триггер)
 create or replace function public.handle_new_user()
@@ -210,7 +196,7 @@ $$;
 -- =========================================================================
 create table if not exists public.practical_submissions (
   id text primary key,
-  student_id uuid references public.profiles(id) on delete cascade,
+  student_id text,
   student_name text not null,
   group_name text not null default '37В',
   subject_id text not null,
@@ -229,39 +215,22 @@ create table if not exists public.practical_submissions (
 
 alter table public.practical_submissions enable row level security;
 
--- Студенты видят свои работы, преподаватели и админы — все работы
-create policy "Студенты видят свои работы, преподаватели - группы"
+-- Чтение практических открыто для всех пользователей (телефон, компьютер)
+drop policy if exists "Студенты видят свои работы, преподаватели - группы" on public.practical_submissions;
+drop policy if exists "practical_submissions_select" on public.practical_submissions;
+create policy "practical_submissions_select"
   on public.practical_submissions for select
-  to authenticated
-  using (
-    auth.uid() = student_id
-    or exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role in ('teacher', 'admin')
-    )
-  );
+  to authenticated, anon
+  using (true);
 
--- Студенты могут отправлять и обновлять свои работы
-create policy "Студенты могут отправлять свои работы"
+-- Отправка и проверка практических работ
+drop policy if exists "Студенты могут отправлять свои работы" on public.practical_submissions;
+drop policy if exists "practical_submissions_upsert" on public.practical_submissions;
+create policy "practical_submissions_upsert"
   on public.practical_submissions for all
-  to authenticated
-  using (
-    auth.uid() = student_id
-    or exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role in ('teacher', 'admin')
-    )
-  )
-  with check (
-    auth.uid() = student_id
-    or exists (
-      select 1 from public.profiles
-      where profiles.id = auth.uid()
-      and profiles.role in ('teacher', 'admin')
-    )
-  );
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 create index if not exists idx_practical_submissions_group on public.practical_submissions(group_name, subject_id);
 create index if not exists idx_practical_submissions_student on public.practical_submissions(student_id);

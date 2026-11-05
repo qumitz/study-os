@@ -23,7 +23,8 @@ import {
   Eye,
   Send,
   MessageSquare,
-  FastForward
+  FastForward,
+  RefreshCw
 } from 'lucide-react';
 import { FastForwardTopicModal } from './FastForwardTopicModal';
 import { getGroupCheckpoint, GroupCurriculumCheckpoint } from '../lib/curriculumSync';
@@ -40,7 +41,9 @@ import {
 import { 
   isSupabaseConfigured, 
   fetchGroupStudentsFromDb,
-  fetchGroupPracticalSubmissionsFromDb
+  fetchGroupPracticalSubmissionsFromDb,
+  syncStudentSubjectGradeToDb,
+  syncGroupStudentsRosterToDb
 } from '../lib/supabase';
 import { getAvailableGroups } from '../lib/groupRegistry';
 import { 
@@ -258,6 +261,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     currentVal: number | string | null;
   } | null>(null);
 
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
+  // Deep refresh from cloud
+  const refreshFromCloud = async (showToast: boolean = false) => {
+    if (!isSupabaseConfigured()) return;
+    setIsSyncing(true);
+    try {
+      const dbStudents = await fetchGroupStudentsFromDb(activeGroup, activeSubject.id);
+      if (dbStudents !== null) {
+        const local = getRegisteredStudentsForGroup(activeGroup);
+        const merged = mergeStudentRecords(local, dbStudents);
+        setStudents(merged);
+        setIsLiveFromDb(true);
+        saveGroupStudents(activeGroup, merged);
+        // Also sync roster back to Supabase
+        syncGroupStudentsRosterToDb(activeGroup, activeSubject.id, merged).catch(() => {});
+      }
+      await loadSubmissions();
+      if (showToast) {
+        setSyncToastMessage('Данные успешно синхронизированы с облаком Supabase!');
+        setTimeout(() => setSyncToastMessage(null), 3500);
+      }
+    } catch (e) {
+      console.warn('Sync failed:', e);
+      if (showToast) {
+        setSyncToastMessage('Ошибка синхронизации с облаком');
+        setTimeout(() => setSyncToastMessage(null), 3500);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Reload students when group changes
   useEffect(() => {
     setStudents(getRegisteredStudentsForGroup(activeGroup));
@@ -265,17 +302,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   // Sync students from Supabase if configured
   useEffect(() => {
-    if (isSupabaseConfigured()) {
-      fetchGroupStudentsFromDb(activeGroup, activeSubject.id).then((dbStudents) => {
-        if (dbStudents !== null) {
-          const local = getRegisteredStudentsForGroup(activeGroup);
-          const merged = mergeStudentRecords(local, dbStudents);
-          setStudents(merged);
-          setIsLiveFromDb(true);
-          saveGroupStudents(activeGroup, merged);
-        }
-      });
-    }
+    refreshFromCloud(false);
   }, [activeGroup, activeSubject.id]);
 
   // Calendar days of the selected academic month
@@ -408,6 +435,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       });
 
       saveGroupStudents(activeGroup, updatedStudents);
+
+      // Sync subject grade to Supabase cloud
+      syncStudentSubjectGradeToDb(studentId, subjId, workId, score).catch(err => {
+        console.warn('Background sync subject grade warning:', err);
+      });
+
       return updatedStudents;
     });
   };
@@ -595,6 +628,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         {/* Quick actions */}
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Cloud Sync Button */}
+          <button
+            type="button"
+            onClick={() => refreshFromCloud(true)}
+            disabled={isSyncing}
+            title="Синхронизировать журнал, оценки и практические работы с облаком Supabase"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-white dark:bg-[#1A1E24] text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors shadow-xs cursor-pointer disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Синхронизация...' : 'Обновить из облака'}</span>
+          </button>
+
           {onSelectSubject && (
             <button
               onClick={() => onSelectSubject(activeSubject)}
@@ -614,6 +659,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Sync Toast Feedback */}
+      {syncToastMessage && (
+        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-medium text-emerald-800 dark:text-emerald-300 flex items-center justify-between animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{syncToastMessage}</span>
+          </div>
+          <button type="button" onClick={() => setSyncToastMessage(null)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Main Subtabs Navigation */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 p-1.5 rounded-2xl bg-gray-100 dark:bg-[#15181E] border border-gray-200 dark:border-gray-800 text-xs font-semibold">

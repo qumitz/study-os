@@ -508,25 +508,37 @@ export async function fetchGroupStudentsFromDb(groupName: string, subjectId: str
   if (!client) return null;
 
   try {
-    // 1. Fetch all student profiles in group
-    const { data: profiles, error: profError } = await client
+    // 1. Fetch student profiles in group (case-insensitive)
+    let profQuery = client
       .from('profiles')
       .select('id, name, group_name')
-      .eq('role', 'student')
-      .eq('group_name', groupName);
+      .eq('role', 'student');
 
-    if (profError || !profiles) return null;
+    if (groupName && groupName !== 'Все группы') {
+      profQuery = profQuery.ilike('group_name', groupName);
+    }
+
+    const { data: profiles, error: profError } = await profQuery;
+
+    if (profError || !profiles) {
+      console.warn('Could not fetch profiles from Supabase:', profError?.message);
+      return null;
+    }
     if (profiles.length === 0) return [];
 
     // 2. Fetch progress for all these students for this subject
     const userIds = profiles.map(p => p.id);
     const { data: progressRows, error: progError } = await client
       .from('student_progress')
-      .select('user_id, grades')
+      .select('user_id, subject_id, topic_statuses, grades')
       .eq('subject_id', subjectId)
       .in('user_id', userIds);
 
-    const progressMap: Record<string, Record<string, { score: number }>> = {};
+    if (progError) {
+      console.warn('Could not fetch progress rows:', progError.message);
+    }
+
+    const progressMap: Record<string, any> = {};
     if (progressRows) {
       progressRows.forEach((r: any) => {
         progressMap[r.user_id] = r.grades || {};
@@ -537,30 +549,76 @@ export async function fetchGroupStudentsFromDb(groupName: string, subjectId: str
     const records: StudentGradeRecord[] = profiles.map(p => {
       const studentGrades = progressMap[p.id] || {};
       const topicGrades: Record<string, number | null> = {};
+      const subjectGrades: Record<string, Record<string, number | null>> = {
+        [subjectId]: {}
+      };
+      const dateGrades: Record<string, Record<string, number | string | null>> = {
+        [subjectId]: {}
+      };
       let total = 0;
       let count = 0;
 
+      // Extract date grades from _dateGrades
+      if (studentGrades._dateGrades && typeof studentGrades._dateGrades === 'object') {
+        Object.entries(studentGrades._dateGrades).forEach(([dateStr, val]) => {
+          if (val !== undefined && val !== null && val !== '') {
+            dateGrades[subjectId][dateStr] = val as number | string;
+          }
+        });
+      }
+
+      // Extract subject grades from _subjectGrades
+      if (studentGrades._subjectGrades && typeof studentGrades._subjectGrades === 'object') {
+        Object.entries(studentGrades._subjectGrades).forEach(([workId, val]) => {
+          if (typeof val === 'number') {
+            subjectGrades[subjectId][workId] = val;
+          }
+        });
+      }
+
+      // Extract topic test scores
       Object.entries(studentGrades).forEach(([tId, val]) => {
-        if (typeof val?.score === 'number') {
-          topicGrades[tId] = val.score;
-          total += val.score;
+        if (!tId.startsWith('_') && typeof (val as any)?.score === 'number') {
+          const score = (val as any).score;
+          topicGrades[tId] = score;
+          subjectGrades[subjectId][tId] = score;
+          total += score;
           count++;
         }
       });
 
-      const avg = count > 0 ? Math.round((total / count) * 10) / 10 : 0;
+      // Calculate subject average
+      const validScores = Object.values(subjectGrades[subjectId]).filter(
+        (v): v is number => typeof v === 'number' && v > 0
+      );
+      const avg = validScores.length > 0
+        ? Math.round((validScores.reduce((a, b) => a + b, 0) / validScores.length) * 10) / 10
+        : (count > 0 ? Math.round((total / count) * 10) / 10 : 0);
+
+      // Check practical statuses from _practicals
+      const practicalStatuses: Record<number, 'submitted' | 'graded' | 'not_submitted'> = {
+        1: count >= 1 ? 'graded' : 'not_submitted',
+        2: count >= 3 ? 'graded' : 'not_submitted',
+        3: count >= 5 ? 'graded' : 'not_submitted',
+        4: count >= 7 ? 'graded' : 'not_submitted'
+      };
+      if (studentGrades._practicals && typeof studentGrades._practicals === 'object') {
+        Object.values(studentGrades._practicals).forEach((sub: any) => {
+          if (sub && sub.workNumber) {
+            practicalStatuses[sub.workNumber] = sub.status === 'graded' ? 'graded' : 'submitted';
+          }
+        });
+      }
 
       return {
         studentId: p.id,
         studentName: p.name,
-        group: p.group_name,
+        group: p.group_name || groupName,
         topicGrades,
-        practicalStatuses: {
-          1: count >= 1 ? 'graded' : 'not_submitted',
-          2: count >= 3 ? 'graded' : 'not_submitted',
-          3: count >= 5 ? 'graded' : 'not_submitted',
-          4: count >= 7 ? 'graded' : 'not_submitted'
-        },
+        subjectGrades,
+        subjectAverages: { [subjectId]: avg },
+        dateGrades,
+        practicalStatuses,
         averageScore: avg
       };
     });
@@ -569,6 +627,169 @@ export async function fetchGroupStudentsFromDb(groupName: string, subjectId: str
   } catch (err) {
     console.warn('Failed to load group students from Supabase:', err);
     return null;
+  }
+}
+
+/**
+ * Sync a single calendar date grade to Supabase in real-time
+ */
+export async function syncStudentDateGradeToDb(
+  studentId: string,
+  subjectId: string,
+  dateStr: string,
+  grade: number | string | null
+): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client || !studentId || !isValidUuid(studentId)) return false;
+
+  try {
+    const { data: existingRow } = await client
+      .from('student_progress')
+      .select('topic_statuses, grades')
+      .eq('user_id', studentId)
+      .eq('subject_id', subjectId)
+      .maybeSingle();
+
+    const currentGrades = (existingRow?.grades as Record<string, any>) || {};
+    const currentDateGrades = { ...((currentGrades._dateGrades as Record<string, any>) || {}) };
+
+    if (grade === null || grade === undefined || grade === '') {
+      delete currentDateGrades[dateStr];
+    } else {
+      currentDateGrades[dateStr] = grade;
+    }
+
+    const nextGrades = {
+      ...currentGrades,
+      _dateGrades: currentDateGrades
+    };
+
+    const { error } = await client
+      .from('student_progress')
+      .upsert({
+        user_id: studentId,
+        subject_id: subjectId,
+        topic_statuses: existingRow?.topic_statuses || {},
+        grades: nextGrades,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,subject_id' });
+
+    if (error) {
+      console.warn('Failed to sync date grade:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Exception in syncStudentDateGradeToDb:', e);
+    return false;
+  }
+}
+
+/**
+ * Sync a student's subject grade (for a specific work/topic) to Supabase in real-time
+ */
+export async function syncStudentSubjectGradeToDb(
+  studentId: string,
+  subjectId: string,
+  workId: string,
+  score: number | null
+): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client || !studentId || !isValidUuid(studentId)) return false;
+
+  try {
+    const { data: existingRow } = await client
+      .from('student_progress')
+      .select('topic_statuses, grades')
+      .eq('user_id', studentId)
+      .eq('subject_id', subjectId)
+      .maybeSingle();
+
+    const currentGrades = (existingRow?.grades as Record<string, any>) || {};
+    const currentSubjectGrades = { ...((currentGrades._subjectGrades as Record<string, any>) || {}) };
+
+    if (score === null || score === undefined) {
+      delete currentSubjectGrades[workId];
+    } else {
+      currentSubjectGrades[workId] = score;
+    }
+
+    const nextGrades = {
+      ...currentGrades,
+      _subjectGrades: currentSubjectGrades
+    };
+
+    const { error } = await client
+      .from('student_progress')
+      .upsert({
+        user_id: studentId,
+        subject_id: subjectId,
+        topic_statuses: existingRow?.topic_statuses || {},
+        grades: nextGrades,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,subject_id' });
+
+    if (error) {
+      console.warn('Failed to sync subject grade:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Exception in syncStudentSubjectGradeToDb:', e);
+    return false;
+  }
+}
+
+/**
+ * Sync group students roster to Supabase (creates student progress rows and profiles if missing)
+ */
+export async function syncGroupStudentsRosterToDb(
+  groupName: string,
+  subjectId: string,
+  students: StudentGradeRecord[]
+): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client || !Array.isArray(students) || students.length === 0) return;
+
+  for (const st of students) {
+    if (!st || !st.studentId || !isValidUuid(st.studentId)) continue;
+    try {
+      const { data: existingRow } = await client
+        .from('student_progress')
+        .select('grades')
+        .eq('user_id', st.studentId)
+        .eq('subject_id', subjectId)
+        .maybeSingle();
+
+      const existingGrades = (existingRow?.grades as Record<string, any>) || {};
+      const localDateGrades = st.dateGrades?.[subjectId] || {};
+      const localSubjectGrades = st.subjectGrades?.[subjectId] || {};
+
+      const mergedDateGrades = {
+        ...localDateGrades,
+        ...((existingGrades._dateGrades as Record<string, any>) || {})
+      };
+      const mergedSubjectGrades = {
+        ...localSubjectGrades,
+        ...((existingGrades._subjectGrades as Record<string, any>) || {})
+      };
+
+      await client
+        .from('student_progress')
+        .upsert({
+          user_id: st.studentId,
+          subject_id: subjectId,
+          topic_statuses: {},
+          grades: {
+            ...existingGrades,
+            _dateGrades: mergedDateGrades,
+            _subjectGrades: mergedSubjectGrades
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,subject_id' });
+    } catch (e) {
+      console.warn('Error syncing student progress roster item:', e);
+    }
   }
 }
 
@@ -872,7 +1093,7 @@ export async function syncPracticalSubmissionToDb(submission: PracticalSubmissio
       .from('practical_submissions')
       .upsert({
         id: submission.id,
-        student_id: isValidUuid(targetUserId) ? targetUserId : null,
+        student_id: targetUserId || submission.studentId,
         student_name: submission.studentName,
         group_name: submission.group,
         subject_id: submission.subjectId,
@@ -891,6 +1112,8 @@ export async function syncPracticalSubmissionToDb(submission: PracticalSubmissio
 
     if (!tableError) {
       success = true;
+    } else {
+      console.warn('practical_submissions table write note:', tableError.message);
     }
   } catch {
     // Table might not exist yet in Supabase schema
@@ -967,7 +1190,7 @@ export async function fetchGroupPracticalSubmissionsFromDb(
   try {
     let query = client.from('practical_submissions').select('*');
     if (groupName && groupName !== 'Все группы') {
-      query = query.eq('group_name', groupName);
+      query = query.ilike('group_name', groupName);
     }
     if (subjectId) {
       query = query.eq('subject_id', subjectId);
@@ -1003,7 +1226,7 @@ export async function fetchGroupPracticalSubmissionsFromDb(
   try {
     let profQuery = client.from('profiles').select('id, name, group_name').eq('role', 'student');
     if (groupName && groupName !== 'Все группы') {
-      profQuery = profQuery.eq('group_name', groupName);
+      profQuery = profQuery.ilike('group_name', groupName);
     }
     const { data: profiles } = await profQuery;
 

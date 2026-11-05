@@ -1,4 +1,5 @@
 import { StudentGradeRecord, User, UserRole } from '../types';
+import { syncStudentDateGradeToDb } from './supabase';
 
 const STORAGE_PREFIX = 'study_os_students_';
 const DELETED_USERS_STORAGE_KEY = 'study_os_deleted_user_identifiers';
@@ -170,12 +171,47 @@ export function mergeStudentRecords(
     if (r && r.studentId) {
       const existing = map.get(r.studentId);
       if (existing) {
+        // Deep merge dateGrades across all subjects
+        const mergedDateGrades: Record<string, Record<string, number | string | null>> = {};
+        const allDateSubjs = new Set([
+          ...Object.keys(existing.dateGrades || {}),
+          ...Object.keys(r.dateGrades || {})
+        ]);
+        allDateSubjs.forEach(sId => {
+          mergedDateGrades[sId] = {
+            ...(existing.dateGrades?.[sId] || {}),
+            ...(r.dateGrades?.[sId] || {})
+          };
+        });
+
+        // Deep merge subjectGrades across all subjects
+        const mergedSubjectGrades: Record<string, Record<string, number | null>> = {};
+        const allSubjs = new Set([
+          ...Object.keys(existing.subjectGrades || {}),
+          ...Object.keys(r.subjectGrades || {})
+        ]);
+        allSubjs.forEach(sId => {
+          mergedSubjectGrades[sId] = {
+            ...(existing.subjectGrades?.[sId] || {}),
+            ...(r.subjectGrades?.[sId] || {})
+          };
+        });
+
+        // Merge practicalStatuses
+        const mergedPracticalStatuses = {
+          ...(existing.practicalStatuses || {}),
+          ...(r.practicalStatuses || {})
+        };
+
         map.set(r.studentId, {
           ...existing,
           ...r,
-          subjectGrades: { ...(existing.subjectGrades || {}), ...(r.subjectGrades || {}) },
+          subjectGrades: mergedSubjectGrades,
           subjectAverages: { ...(existing.subjectAverages || {}), ...(r.subjectAverages || {}) },
-          topicGrades: { ...(existing.topicGrades || {}), ...(r.topicGrades || {}) }
+          topicGrades: { ...(existing.topicGrades || {}), ...(r.topicGrades || {}) },
+          dateGrades: mergedDateGrades,
+          practicalStatuses: mergedPracticalStatuses,
+          averageScore: r.averageScore || existing.averageScore || 0
         });
       } else {
         map.set(r.studentId, r);
@@ -306,6 +342,11 @@ export function updateStudentTopicGrade(
     : subjAvg;
 
   saveGroupStudents(groupName, students);
+
+  // Sync test score to Supabase cloud in real-time
+  syncStudentDateGradeToDb(studentId, subjectId, todayStr, score).catch(err => {
+    console.warn('Background sync test score warning:', err);
+  });
 }
 
 /**
@@ -348,6 +389,11 @@ export function updateStudentDateGrade(
   }
 
   saveGroupStudents(groupName, students);
+
+  // Sync date grade to Supabase cloud in real-time
+  syncStudentDateGradeToDb(studentId, subjectId, dateStr, grade).catch(err => {
+    console.warn('Background sync date grade warning:', err);
+  });
 }
 
 /**
