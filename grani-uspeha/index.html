@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>День профмастерства: Грани успеха (Огранка)</title>
+  
+  <!-- Сенсорная оптимизация: блокировка масштабирования и дабл-тап зума для 4K/1080p мультибордов -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- Шрифты Google Fonts: Inter и Montserrat -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Three.js (3D WebGL Ядро) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Кастомная дизайн-система и стили -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ======================================================================
+       1. ФОНОВЫЕ СЛОИ (DEEP CYBERNETIC ENVIRONMENT)
+       ====================================================================== -->
+  <div class="bg-layer bg-radial"></div>
+  <div class="bg-layer bg-grid"></div>
+  <div id="bg-ambient-glow" class="bg-ambient-glow"></div>
+  <div class="bg-layer bg-scanlines"></div>
+
+  <!-- ======================================================================
+       2. 3D И МЕДИА-ЯДРО (THREE.JS / CANVAS / SPLINE)
+       ====================================================================== -->
+  <div id="scene-container">
+    <canvas id="webgl-canvas"></canvas>
+    <!-- Контейнер для веб-компонента <spline-viewer>, если задан SPLINE_SCENE_URL -->
+    <div id="spline-container"></div>
+  </div>
+
+  <!-- Холст для 2D-эффектов: ударные волны, осколки, искры, праздничный салют -->
+  <canvas id="effects-canvas"></canvas>
+
+  <!-- ======================================================================
+       3. ВЕРХНИЙ СТАТУС-БАР (HUD)
+       ====================================================================== -->
+  <header id="hud-header">
+    <!-- Левая плашка: Бренд мероприятия -->
+    <div class="glass-panel brand-badge">
+      <div class="brand-icon-wrapper">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 3h12l4 6-10 12L2 9z"/>
+        </svg>
+      </div>
+      <div>
+        <span class="brand-title">ГРАНИ УСПЕХА</span>
+        <span class="brand-subtitle">Старт в профессию • Огранка</span>
+      </div>
+    </div>
+
+    <!-- Центральный индикатор прогресса: 6 сегментов (Пролог + 5 Граней) -->
+    <nav class="glass-panel progress-hud" aria-label="Прогресс огранки">
+      <div id="progress-segments" class="progress-segments">
+        <div class="progress-segment active" data-phase="0">
+          <span class="seg-num">0</span>
+          <span>Пролог</span>
+        </div>
+        <div class="progress-segment" data-phase="1">
+          <span class="seg-num">1</span>
+          <span>Молоток</span>
+        </div>
+        <div class="progress-segment" data-phase="2">
+          <span class="seg-num">2</span>
+          <span>Напильник</span>
+        </div>
+        <div class="progress-segment" data-phase="3">
+          <span class="seg-num">3</span>
+          <span>Шлифовка</span>
+        </div>
+        <div class="progress-segment" data-phase="4">
+          <span class="seg-num">4</span>
+          <span>Лупа</span>
+        </div>
+        <div class="progress-segment" data-phase="5">
+          <span class="seg-num">5</span>
+          <span>Мастер</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Правая группа: инструмент, часы сцены, кнопки управления -->
+    <div class="status-actions">
+      <!-- Индикатор инструмента -->
+      <div class="tool-indicator">
+        <div id="tool-icon" class="tool-badge-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/>
+          </svg>
+        </div>
+        <div>
+          <div class="tool-badge-text-top">Инструмент фазы</div>
+          <div id="tool-name" class="tool-badge-name">СЫРОЙ МОНОЛИТ</div>
+        </div>
+      </div>
+
+      <!-- Таймер/Часы сцены для ведущего -->
+      <div class="glass-panel" style="padding: 0.6rem 1rem; font-family: monospace; font-size: 0.95rem; font-weight: 700; color: var(--neon-cyan-bright); letter-spacing: 0.08em;">
+        <span id="clock-display">00:00:00</span>
+      </div>
+
+      <!-- Кнопка звука -->
+      <button id="btn-sound" class="hud-btn active" title="Вкл/Выкл звук (Клавиша M)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+      </button>
+
+      <!-- Кнопка полноэкранного режима -->
+      <button id="btn-fullscreen" class="hud-btn" title="Полноэкранный режим (Клавиша F / F11)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ======================================================================
+       4. ИНФОРМАЦИОННЫЙ БАННЕР СЦЕНАРИЯ И ФИЛОСОФИИ
+       ====================================================================== -->
+  <div id="philosophy-banner">
+    <div id="phase-pill" class="phase-pill">ПРОЛОГ</div>
+    <h1 id="phase-heading" class="phase-heading">Необработанный камень</h1>
+    <p id="phase-meaning" class="phase-meaning">Сырой минерал | Исходный потенциал</p>
+  </div>
+
+  <!-- ======================================================================
+       5. ПОДСКАЗКА ВЗАИМОДЕЙСТВИЯ (ИНТЕРАКТИВНЫЙ ХИНТ)
+       ====================================================================== -->
+  <div id="center-interaction-hint">
+    <span class="hint-dot"></span>
+    <span id="hint-text">Коснитесь экрана или нажмите «Удар», чтобы начать огранку</span>
+  </div>
+
+  <!-- ======================================================================
+       6. СПЕЦИАЛЬНЫЙ ОВЕРЛЕЙ: ФАЗА 4 (ЛУПА / МЕДИА-ЯЧЕЙКИ СТУДЕНЧЕСКОЙ ЖИЗНИ)
+       ====================================================================== -->
+  <div id="phase4-media-overlay">
+    <div class="media-radial-grid">
+      <div class="media-cell cell-1">
+        <div class="media-cell-visual">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
+            <circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>
+          </svg>
+        </div>
+        <div class="media-cell-title">Отделение «АВТО»</div>
+      </div>
+
+      <div class="media-cell cell-2">
+        <div class="media-cell-visual">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"/><path d="M10 8h.01"/><path d="M14 8h.01"/>
+            <path d="M8 13a4 4 0 0 0 8 0"/>
+          </svg>
+        </div>
+        <div class="media-cell-title">Дошкольное отделение (ДО)</div>
+      </div>
+
+      <div class="media-cell cell-3">
+        <div class="media-cell-visual">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <div class="media-cell-title">3D-моделирование и дизайн</div>
+      </div>
+
+      <div class="media-cell cell-4">
+        <div class="media-cell-visual">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+        </div>
+        <div class="media-cell-title">Творчество: Музыка и сцена</div>
+      </div>
+
+      <div class="media-cell cell-5">
+        <div class="media-cell-visual">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div class="media-cell-title">Команда и студенческая дружба</div>
+      </div>
+
+      <div class="media-cell cell-6">
+        <div class="media-cell-visual">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="m2 22 1-1h3l9-9"/><path d="M14 8 8 14"/><path d="m18 10 4-4a2.828 2.828 0 1 0-4-4l-4 4"/>
+          </svg>
+        </div>
+        <div class="media-cell-title">Отделение «Строитель»</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       7. СПЕЦИАЛЬНЫЙ ОВЕРЛЕЙ: ФАЗА 5 (ФИНАЛ: ВРАЩАЮЩИЙСЯ ГЕРБ И ДЕВИЗ)
+       ====================================================================== -->
+  <div id="phase5-final-overlay">
+    <div class="motto-banner-wrap">
+      <span class="motto-banner-text">★ КАЖДЫЙ СТУДЕНТ — АЛМАЗ ★</span>
+    </div>
+    <div class="final-action-buttons">
+      <button id="btn-open-ceremony" class="gold-glow-btn">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+        </svg>
+        Слово директора и Награждение
+      </button>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       8. ВЫДВИЖНАЯ БОКОВАЯ КАРТОЧКА НОМЕРОВ И СУФЛЁРА (SIDE GLASS DRAWER)
+       ====================================================================== -->
+  <aside id="side-drawer" class="glass-panel" aria-label="Концертные номера и сценарий">
+    <!-- Кнопка-язычок для сворачивания/разворачивания -->
+    <div id="drawer-toggle-tab" title="Открыть/закрыть список номеров">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+      <span>ПРОГРАММА</span>
+    </div>
+
+    <!-- Заголовок шторки -->
+    <div class="drawer-header">
+      <div class="drawer-header-left">
+        <span id="drawer-tag" class="drawer-tag">ГРАНЬ 1</span>
+        <h2 id="drawer-title" class="drawer-title">Знакомство</h2>
+      </div>
+    </div>
+
+    <!-- Табы переключения: Номера / Текст суфлера -->
+    <div class="drawer-tabs">
+      <button class="drawer-tab-btn active" data-tab="numbers">Концертные номера</button>
+      <button class="drawer-tab-btn" data-tab="script">Суфлёр сцены</button>
+    </div>
+
+    <!-- Контентная область -->
+    <div class="drawer-content">
+      <!-- Список номеров текущей фазы -->
+      <div id="numbers-list" style="display: flex; flex-direction: column; gap: 0.85rem;"></div>
+
+      <!-- Текст диалога Мастера и Подмастерья для суфлера -->
+      <div id="dialogue-list" class="script-dialogue-block" style="display: none;"></div>
+    </div>
+  </aside>
+
+  <!-- ======================================================================
+       9. НИЖНИЙ ДОК НАВИГАЦИИ (DOCK BAR)
+       ====================================================================== -->
+  <div id="bottom-dock" class="glass-panel">
+    <button id="btn-prev-phase" class="dock-nav-btn" title="Предыдущая грань (Стрелка влево)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+      <span>Назад</span>
+    </button>
+
+    <button id="btn-strike" class="dock-strike-btn" title="Удар текущим инструментом (Пробел или Тап)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"/>
+        <path d="M17.64 15 22 10.64"/>
+      </svg>
+      <span>УДАР ИНСТРУМЕНТОМ</span>
+    </button>
+
+    <button id="btn-next-phase" class="dock-nav-btn" title="Следующая грань (Стрелка вправо или Пробел)">
+      <span>Вперёд</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ======================================================================
+       10. СКРЫТЫЙ ADMIN CONTROL BAR (ДЛЯ ВЕДУЩЕГО / ЗВУКОРЕЖИССЕРА)
+       ====================================================================== -->
+  <!-- Незаметная кнопка вызова в левом нижнем углу -->
+  <button id="admin-trigger-btn" title="Панель оператора (Клавиша A)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+
+  <!-- Модальное окно оператора сцены -->
+  <div id="admin-modal">
+    <div class="admin-window glass-panel">
+      <div class="admin-window-header">
+        <h3 style="font-size: 1.2rem; font-weight: 800; color: #fff;">Панель управления оператора сцены</h3>
+        <button id="btn-close-admin" class="hud-btn">✕</button>
+      </div>
+      <div class="admin-window-body">
+        <div>
+          <div class="admin-section-title">Быстрый переход по фазам огранки</div>
+          <div class="admin-grid-phases">
+            <button class="admin-phase-btn" data-phase="0">
+              <span class="p-num">0</span>
+              <span class="p-name">Пролог</span>
+            </button>
+            <button class="admin-phase-btn" data-phase="1">
+              <span class="p-num">1</span>
+              <span class="p-name">Молоток</span>
+            </button>
+            <button class="admin-phase-btn" data-phase="2">
+              <span class="p-num">2</span>
+              <span class="p-name">Напильник</span>
+            </button>
+            <button class="admin-phase-btn" data-phase="3">
+              <span class="p-num">3</span>
+              <span class="p-name">Шлифовка</span>
+            </button>
+            <button class="admin-phase-btn" data-phase="4">
+              <span class="p-num">4</span>
+              <span class="p-name">Лупа</span>
+            </button>
+            <button class="admin-phase-btn" data-phase="5">
+              <span class="p-num">5</span>
+              <span class="p-name">Бриллиант</span>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div class="admin-section-title">Интеграция со Spline 3D</div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+            Вставьте URL сцены Spline (.splinecode). Если поле пустое — работает встроенный процедурный 3D WebGL кристалл.
+          </div>
+          <div class="spline-url-box">
+            <input id="spline-url-input" type="text" class="spline-url-input" placeholder="https://prod.spline.design/.../scene.splinecode">
+            <button id="btn-save-spline" class="dock-nav-btn" style="background: var(--neon-purple); border-color: var(--neon-purple-bright);">Сохранить</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="admin-section-title">Памятка горячих клавиш клавиатуры и кликера</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+            <div><strong style="color: #fff;">Пробел / Стрелка вправо:</strong> Следующая грань</div>
+            <div><strong style="color: #fff;">Стрелка влево:</strong> Предыдущая грань</div>
+            <div><strong style="color: #fff;">Цифры 0–5:</strong> Моментальный переход</div>
+            <div><strong style="color: #fff;">Клавиша S:</strong> Удар инструментом</div>
+            <div><strong style="color: #fff;">Клавиша M:</strong> Вкл/выкл звука</div>
+            <div><strong style="color: #fff;">Клавиша F:</strong> Полноэкранный режим</div>
+            <div><strong style="color: #fff;">Клавиша D:</strong> Шторка программы</div>
+            <div><strong style="color: #fff;">Клавиша C:</strong> Речь директора и награждение</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       11. МОДАЛЬНОЕ ОКНО: СЛОВО ДИРЕКТОРА И НАГРАЖДЕНИЕ
+       ====================================================================== -->
+  <div id="ceremony-modal">
+    <div class="ceremony-window glass-panel">
+      <div class="ceremony-header">
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 700; color: var(--neon-amber); text-transform: uppercase; letter-spacing: 0.15em;">Торжественная часть</span>
+          <h2 style="font-size: 1.5rem; font-weight: 800; color: #fff;">Финал • Слово директора и Церемония награждения</h2>
+        </div>
+        <button id="btn-close-ceremony" class="hud-btn">✕</button>
+      </div>
+
+      <div class="ceremony-tabs">
+        <button class="ceremony-tab-btn active" data-ceremony-tab="director">Слово директора</button>
+        <button class="ceremony-tab-btn" data-ceremony-tab="students">Блок 1: Студенты</button>
+        <button class="ceremony-tab-btn" data-ceremony-tab="teachers">Блок 2: Преподаватели и мастера</button>
+        <button class="ceremony-tab-btn" data-ceremony-tab="partners">Блок 3: Заказчики кадров</button>
+      </div>
+
+      <div class="ceremony-body">
+        <!-- Вкладка: Слово директора -->
+        <div id="ceremony-sec-director" class="ceremony-section">
+          <div class="director-speech-card">
+            <h3 style="font-size: 1.3rem; font-weight: 800; color: #fef08a; margin-bottom: 1rem;">Официальное обращение директора колледжа</h3>
+            <p><strong>Дорогие первокурсники! Уважаемые преподаватели, гости!</strong></p>
+            <p>Сегодня я стал свидетелем удивительного действа. На наших глазах необработанный камень превратился в алмаз. И это не сказка. Это вы. Это ваш первый шаг в профессию.</p>
+            <p>Пять граней. Пять инструментов. Пять уроков. Вы прошли их все. Молоток разбил страх. Напильник снял лишнее. Шлифовка сделала вас гладкими. Лупа помогла увидеть главное. А рука мастера — это вы сами. Ваши руки, ваша голова, ваше сердце.</p>
+            <p>Я хочу, чтобы вы запомнили главное: алмаз не знает, что он алмаз. Пока его не огранят. Но вы — уже не необработанные камни. Вы — будущие специалисты. И это не просто слова. Это ваша жизнь.</p>
+            <p>Впереди — новые грани. Новые вершины. И я верю, что вы справитесь. Потому что вы — команда. Потому что вы — колледж. Потому что вы — алмазы!</p>
+            <p style="font-size: 1.15rem; font-weight: 700; color: #facc15; margin-top: 1rem;">С праздником, дорогие первокурсники! С праздником, колледж!</p>
+          </div>
+        </div>
+
+        <!-- Вкладка: Награждение студентов -->
+        <div id="ceremony-sec-students" class="ceremony-section" style="display: none;">
+          <p style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">
+            Мастер: <em>«Для вручения дипломов приглашается директор колледжа».</em> Поля ФИО можно заполнять прямо на экране!
+          </p>
+          <table class="award-table">
+            <thead>
+              <tr>
+                <th style="width: 32%;">Номинация</th>
+                <th style="width: 43%;">За что вручается</th>
+                <th style="width: 25%;">ФИО студента</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong style="color: #fff;">«За успехи в учебной деятельности»</strong></td>
+                <td>Высокие результаты в освоении профессиональных дисциплин</td>
+                <td><input type="text" id="award-student-1" name="award-student-1" class="award-input" placeholder="Иванов И.И., гр. 101"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За победы в конкурсах профмастерства»</strong></td>
+                <td>Призовые места в конкурсах, олимпиадах, чемпионатах</td>
+                <td><input type="text" id="award-student-2" name="award-student-2" class="award-input" placeholder="Петров П.П., гр. 204"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За активное участие в жизни отделения»</strong></td>
+                <td>Организация и проведение мероприятий, помощь отделению</td>
+                <td><input type="text" id="award-student-3" name="award-student-3" class="award-input" placeholder="Сидорова А.В., гр. 105"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За лучший творческий номер»</strong></td>
+                <td>Самый яркий номер по итогам фестиваля</td>
+                <td><input type="text" id="award-student-4" name="award-student-4" class="award-input" placeholder="Группа «АВТО»"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За волю к победе»</strong></td>
+                <td>Преодоление трудностей, стремление к высокому результату</td>
+                <td><input type="text" id="award-student-5" name="award-student-5" class="award-input" placeholder="Ковалев Д.С., гр. 102"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Вкладка: Награждение педагогов -->
+        <div id="ceremony-sec-teachers" class="ceremony-section" style="display: none;">
+          <p style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">
+            Мастер: <em>«Для вручения благодарностей приглашается заведующий отделением».</em>
+          </p>
+          <table class="award-table">
+            <thead>
+              <tr>
+                <th style="width: 35%;">Номинация</th>
+                <th style="width: 40%;">За что вручается</th>
+                <th style="width: 25%;">ФИО преподавателя / мастера</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong style="color: #fff;">«За профессионализм и преданность делу»</strong></td>
+                <td>Многолетний добросовестный труд, высокое качество подготовки</td>
+                <td><input type="text" id="award-teacher-1" name="award-teacher-1" class="award-input" placeholder="ФИО преподавателя"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За подготовку студентов к конкурсам»</strong></td>
+                <td>Подготовка победителей и призёров чемпионатов профмастерства</td>
+                <td><input type="text" id="award-teacher-2" name="award-teacher-2" class="award-input" placeholder="ФИО наставника"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За вклад в развитие отделения»</strong></td>
+                <td>Укрепление материально-технической базы, новые методики</td>
+                <td><input type="text" id="award-teacher-3" name="award-teacher-3" class="award-input" placeholder="ФИО сотрудника"></td>
+              </tr>
+              <tr>
+                <td><strong style="color: #fff;">«За творческий подход в обучении»</strong></td>
+                <td>Нестандартные методы преподавания, вдохновение студентов</td>
+                <td><input type="text" id="award-teacher-4" name="award-teacher-4" class="award-input" placeholder="ФИО мастера"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Вкладка: Слово работодателей -->
+        <div id="ceremony-sec-partners" class="ceremony-section" style="display: none;">
+          <div class="director-speech-card" style="border-left-color: var(--neon-cyan);">
+            <h3 style="font-size: 1.3rem; font-weight: 800; color: var(--neon-cyan-bright); margin-bottom: 1rem;">Слово заказчиков кадров и индустриальных партнеров</h3>
+            <p><strong>Представитель заказчиков:</strong> «Дорогие друзья! Мы рады видеть, как растут будущие специалисты. Ваше отделение готовит настоящих мастеров своего дела.</p>
+            <p>И мы готовы ждать вас на нашем производстве. Приходите на практику, создавайте будущее вместе с нами. Мы верим в вас!»</p>
+            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); color: var(--neon-purple-bright); font-style: italic;">
+              Мастер: «Вот и всё. Камень стал алмазом. Ну, или почти. Осталось ещё три года учёбы. А жизнь — самая большая грань!»
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Главный скрипт логики, 3D движка и звука -->
+  <script src="app.js"></script>
+</body>
+</html>
